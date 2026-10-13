@@ -63,7 +63,6 @@ void runClient() {
 
 }
 
-
 void runServer() {
 
 	struct addrinfo settings;
