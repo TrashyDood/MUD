@@ -16,7 +16,7 @@ int Server::Run(Port port)
     const int startupResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
     if (startupResult != 0)
     {
-        std::cerr << "WSAStartup failed: " << startupResult << '\n';
+        WRITE_ERROR("WSAStartup failed: " << startupResult);
         return startupResult;
     }
 
@@ -24,9 +24,8 @@ int Server::Run(Port port)
     if (listenSocket == INVALID_SOCKET)
     {
         WRITE_ERROR("socket() failed: " << WSAGetLastError());
-        //std::cerr << "socket() failed: " << WSAGetLastError() << '\n';
-
         WSACleanup();
+
         return WSAGetLastError();
     }
 
@@ -38,18 +37,16 @@ int Server::Run(Port port)
     if (bind(listenSocket, reinterpret_cast<SOCKADDR*>(&service), sizeof(service)) == SOCKET_ERROR)
     {
         WRITE_ERROR("bind() failed: " << WSAGetLastError());
-        //std::cerr << "bind() failed: " << WSAGetLastError() << '\n';
-
         Terminate();
+
         return WSAGetLastError();
     }
 
     if (listen(listenSocket, SOMAXCONN) == SOCKET_ERROR)
     {
         WRITE_ERROR("listen() failed: " << WSAGetLastError());
-        //std::cerr << "listen() failed: " << WSAGetLastError() << '\n';
-
         Terminate();
+
         return WSAGetLastError();
     }
 
@@ -70,7 +67,7 @@ bool Server::Terminate()
 
 void Server::OnRun()
 {
-    WRITELINE("Server listening on port " << port << "...");
+    WRITE_LINE("Server listening on port " << port << "...");
     //std::cout << "Server listening on port " << DefaultPort << "...\n";
 
     while (isRunning)
@@ -79,7 +76,6 @@ void Server::OnRun()
         if (clientSocket == INVALID_SOCKET)
         {
             WRITE_ERROR("accept() failed: " << WSAGetLastError());
-            //std::cerr << "accept() failed: " << WSAGetLastError() << '\n';
             break;
         }
 
@@ -87,8 +83,7 @@ void Server::OnRun()
         const int bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
         if (bytesReceived > 0)
         {
-            WRITELINE("Received request:\n" << buffer);
-            //std::cout << "Received request:\n" << buffer << '\n';
+            WRITE_LINE("Received request:\n" << buffer);
         }
 
         const std::string response =
