@@ -12,6 +12,7 @@
                 "-Iinclude",
                 "main.cpp",
                 "src/Server.cpp",
+                "src/Client.cpp",
                 "-o",
                 "MUD.exe",
                 "-lws2_32"

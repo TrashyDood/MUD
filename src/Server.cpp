@@ -1,22 +1,22 @@
 #include "../include/Server.h"
 
 #include <cstring>
-#include <iostream>
 #include <string>
 
 Server::Server() = default;
 
-void Server::Run()
+int Server::Run(Port port)
 {
+    if (isRunning) return 0;
+
+    Server::port = port;
     WSADATA wsaData{};
-    SOCKET listenSocket = INVALID_SOCKET;
-    SOCKET clientSocket = INVALID_SOCKET;
 
     const int startupResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
     if (startupResult != 0)
     {
         std::cerr << "WSAStartup failed: " << startupResult << '\n';
-        return;
+        return startupResult;
     }
 
     listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -24,20 +24,20 @@ void Server::Run()
     {
         std::cerr << "socket() failed: " << WSAGetLastError() << '\n';
         WSACleanup();
-        return;
+        return WSAGetLastError();
     }
 
     sockaddr_in service{};
     service.sin_family = AF_INET;
     service.sin_addr.s_addr = INADDR_ANY;
-    service.sin_port = htons(DefaultPort);
+    service.sin_port = htons(port);
 
     if (bind(listenSocket, reinterpret_cast<SOCKADDR*>(&service), sizeof(service)) == SOCKET_ERROR)
     {
         std::cerr << "bind() failed: " << WSAGetLastError() << '\n';
         closesocket(listenSocket);
         WSACleanup();
-        return;
+        return WSAGetLastError();
     }
 
     if (listen(listenSocket, SOMAXCONN) == SOCKET_ERROR)
@@ -45,12 +45,27 @@ void Server::Run()
         std::cerr << "listen() failed: " << WSAGetLastError() << '\n';
         closesocket(listenSocket);
         WSACleanup();
-        return;
+        return WSAGetLastError();
     }
 
-    std::cout << "MUD server listening on port " << DefaultPort << "...\n";
+    OnRun();
+    return 0;
+}
 
-    while (true)
+bool Server::Terminate()
+{
+    if (!isRunning) return false;
+    OnTerminate();
+    return true;
+}
+
+void Server::OnRun()
+{
+    WRITELINE("Server listening on port " << port << "...");
+    //std::cout << "Server listening on port " << DefaultPort << "...\n";
+
+    isRunning = true;
+    while (isRunning)
     {
         clientSocket = accept(listenSocket, nullptr, nullptr);
         if (clientSocket == INVALID_SOCKET)
@@ -63,7 +78,8 @@ void Server::Run()
         const int bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
         if (bytesReceived > 0)
         {
-            std::cout << "Received request:\n" << buffer << '\n';
+            WRITELINE("Received request:\n" << buffer);
+            //std::cout << "Received request:\n" << buffer << '\n';
         }
 
         const std::string response =
@@ -77,7 +93,11 @@ void Server::Run()
         closesocket(clientSocket);
         clientSocket = INVALID_SOCKET;
     }
+}
 
+void Server::OnTerminate()
+{
     closesocket(listenSocket);
     WSACleanup();
+    isRunning = false;
 }
