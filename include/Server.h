@@ -34,5 +34,4 @@ public:
 
 private:
     void OnRun();
-    void OnTerminate();
 };

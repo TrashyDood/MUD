@@ -9,6 +9,7 @@ int Server::Run(Port port)
 {
     if (isRunning) return 0;
 
+    isRunning = true;
     Server::port = port;
     WSADATA wsaData{};
 
@@ -22,7 +23,9 @@ int Server::Run(Port port)
     listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (listenSocket == INVALID_SOCKET)
     {
-        std::cerr << "socket() failed: " << WSAGetLastError() << '\n';
+        WRITE_ERROR("socket() failed: " << WSAGetLastError());
+        //std::cerr << "socket() failed: " << WSAGetLastError() << '\n';
+
         WSACleanup();
         return WSAGetLastError();
     }
@@ -34,17 +37,19 @@ int Server::Run(Port port)
 
     if (bind(listenSocket, reinterpret_cast<SOCKADDR*>(&service), sizeof(service)) == SOCKET_ERROR)
     {
-        std::cerr << "bind() failed: " << WSAGetLastError() << '\n';
-        closesocket(listenSocket);
-        WSACleanup();
+        WRITE_ERROR("bind() failed: " << WSAGetLastError());
+        //std::cerr << "bind() failed: " << WSAGetLastError() << '\n';
+
+        Terminate();
         return WSAGetLastError();
     }
 
     if (listen(listenSocket, SOMAXCONN) == SOCKET_ERROR)
     {
-        std::cerr << "listen() failed: " << WSAGetLastError() << '\n';
-        closesocket(listenSocket);
-        WSACleanup();
+        WRITE_ERROR("listen() failed: " << WSAGetLastError());
+        //std::cerr << "listen() failed: " << WSAGetLastError() << '\n';
+
+        Terminate();
         return WSAGetLastError();
     }
 
@@ -55,7 +60,11 @@ int Server::Run(Port port)
 bool Server::Terminate()
 {
     if (!isRunning) return false;
-    OnTerminate();
+
+    closesocket(listenSocket);
+    WSACleanup();
+    isRunning = false;
+
     return true;
 }
 
@@ -64,13 +73,13 @@ void Server::OnRun()
     WRITELINE("Server listening on port " << port << "...");
     //std::cout << "Server listening on port " << DefaultPort << "...\n";
 
-    isRunning = true;
     while (isRunning)
     {
         clientSocket = accept(listenSocket, nullptr, nullptr);
         if (clientSocket == INVALID_SOCKET)
         {
-            std::cerr << "accept() failed: " << WSAGetLastError() << '\n';
+            WRITE_ERROR("accept() failed: " << WSAGetLastError());
+            //std::cerr << "accept() failed: " << WSAGetLastError() << '\n';
             break;
         }
 
@@ -93,11 +102,4 @@ void Server::OnRun()
         closesocket(clientSocket);
         clientSocket = INVALID_SOCKET;
     }
-}
-
-void Server::OnTerminate()
-{
-    closesocket(listenSocket);
-    WSACleanup();
-    isRunning = false;
 }
