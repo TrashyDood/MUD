@@ -22,7 +22,9 @@ int Server::Run(Port port)
     listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (listenSocket == INVALID_SOCKET)
     {
-        std::cerr << "socket() failed: " << WSAGetLastError() << '\n';
+        WRITE_ERROR("socket() failed: " << WSAGetLastError());
+        //std::cerr << "socket() failed: " << WSAGetLastError() << '\n';
+
         WSACleanup();
         return WSAGetLastError();
     }
@@ -34,17 +36,19 @@ int Server::Run(Port port)
 
     if (bind(listenSocket, reinterpret_cast<SOCKADDR*>(&service), sizeof(service)) == SOCKET_ERROR)
     {
-        std::cerr << "bind() failed: " << WSAGetLastError() << '\n';
-        closesocket(listenSocket);
-        WSACleanup();
+        WRITE_ERROR("bind() failed: " << WSAGetLastError());
+        //std::cerr << "bind() failed: " << WSAGetLastError() << '\n';
+
+        OnTerminate();
         return WSAGetLastError();
     }
 
     if (listen(listenSocket, SOMAXCONN) == SOCKET_ERROR)
     {
-        std::cerr << "listen() failed: " << WSAGetLastError() << '\n';
-        closesocket(listenSocket);
-        WSACleanup();
+        WRITE_ERROR("listen() failed: " << WSAGetLastError());
+        //std::cerr << "listen() failed: " << WSAGetLastError() << '\n';
+
+        OnTerminate();
         return WSAGetLastError();
     }
 
@@ -55,6 +59,7 @@ int Server::Run(Port port)
 bool Server::Terminate()
 {
     if (!isRunning) return false;
+    
     OnTerminate();
     return true;
 }
