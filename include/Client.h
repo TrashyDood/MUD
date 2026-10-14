@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../include/ClientServerCommon.h"
+#include "ClientServerCommon.h"
 
 class Client
 {

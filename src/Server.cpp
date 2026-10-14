@@ -1,4 +1,4 @@
-#include "../include/Server.h"
+#include "Server.h"
 
 #include <cstring>
 #include <string>
