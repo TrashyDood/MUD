@@ -1,5 +1,4 @@
 #include "../include/Client.h"
-#include "../include/Utils.h"
 
 int Client::Connect()
 {

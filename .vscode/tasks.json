@@ -13,7 +13,7 @@
                 "main.cpp",
                 "src/Server.cpp",
                 "src/Client.cpp",
-                "src/CommandInterpreter.cpp",
+                "src/CommandsIO.cpp",
                 "-o",
                 "MUD.exe",
                 "-lws2_32"
