@@ -56,8 +56,10 @@ namespace PacketsIO
 
 class BitStream
 {
+    using BitStreamData = uint64_t;
+
 public:
-    uint64_t data = 0;
+    BitStreamData data = 0;
     uint8_t bitPosition = 0;
 
     uint8_t GetBitSize() const { return bitPosition; }
@@ -95,7 +97,7 @@ public:
     }
 
     template<typename T>
-    bool Read(T& value)
+    bool Read(T& outValue)
     {
         static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool>);
 
@@ -107,7 +109,7 @@ public:
         uint64_t mask = bitCount == 64 ? UINT64_MAX : (uint64_t{1} << bitCount) - 1;
         uint64_t bits = (data >> bitPosition) & mask;
 
-        value = static_cast<T>(bits);
+        outValue = static_cast<T>(bits);
         bitPosition += bitCount;
 
         return true;
