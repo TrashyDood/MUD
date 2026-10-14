@@ -1,10 +1,12 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <string>
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <type_traits>
 
 using NetPacket64 = uint64_t; // Contains the data of a packet being sent.
 using NetPacketType = uint8_t; // Represents the type of packet being sent.
@@ -54,64 +56,102 @@ namespace PacketsIO
     }
 }
 
-class BitStream
+template<typename TBufferData = uint64_t>
+class FixedBitBuffer
 {
-    using BitStreamData = uint64_t;
+    static_assert(std::is_integral_v<TBufferData> && !std::is_same_v<TBufferData, bool>);
+    static_assert(std::is_unsigned_v<TBufferData>, "FixedBitBuffer requires an unsigned integral buffer type.");
+
+    TBufferData data = 0;
+    size_t bitCursor = 0;
+    size_t bitSize = 0;
+    bool isReading = false;
 
 public:
-    BitStreamData data = 0;
-    uint8_t bitPosition = 0;
+    static constexpr TBufferData MaxRange = std::numeric_limits<TBufferData>::max();
+    static constexpr uint8_t ByteCapacity() { return sizeof(TBufferData); }
+    static constexpr uint8_t BitCapacity() { return ByteCapacity() * 8; }
 
-    uint8_t GetBitSize() const { return bitPosition; }
-    uint8_t GetByteSize() const { return (bitPosition + 7) / 8; }
+    FixedBitBuffer() = default;
+    explicit FixedBitBuffer(TBufferData initWith) { WriteNext(initWith); }
 
-    void ResetPosition() { bitPosition = 0; }
+    size_t GetBitSize() const { return bitSize; }
+    size_t GetByteSize() const { return (bitSize + 7) / 8; }
+    size_t GetCursor() const { return bitCursor; }
+    TBufferData GetData() const { return data; }
 
-    void Clear()
+    void ResetCursor() { bitCursor = 0; }
+    void ClearData(TBufferData overwriteWith = 0)
     {
-        data = 0;
-        bitPosition = 0;
+        data = overwriteWith;
+        bitSize = 0;
+        bitCursor = 0;
+        isReading = false;
     }
 
+private:
+    static constexpr TBufferData MakeMask(const uint8_t bitCount)
+    {
+        if (bitCount == 0) return 0;
+        if (bitCount >= BitCapacity()) return MaxRange;
+        return (TBufferData{1} << bitCount) - 1;
+    }
+
+public:
     template<typename T>
-    bool Write(T value)
+    bool WriteNext(const T& value, const uint8_t bitCount = static_cast<uint8_t>(sizeof(T) * 8))
     {
         static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool>);
+        
+        if (bitCount > BitCapacity()) return false;
 
-        const uint8_t bitCount = sizeof(T) * 8;
+        if (isReading)
+        {
+            isReading = false;
+            ResetCursor();
+        }
 
-        if (bitPosition > 64 - bitCount)
-            return false;
+        if (bitCount == 0) return true;
+        if (bitCursor > capacity - bitCount) return false;
 
         using U = std::make_unsigned_t<T>;
 
-        uint64_t mask = bitCount == 64 ? UINT64_MAX : (uint64_t{1} << bitCount) - 1;
-        uint64_t bits = static_cast<uint64_t>(static_cast<U>(value)) & mask;
+        const TBufferData mask = MakeMask(bitCount);
+        const TBufferData bits = static_cast<TBufferData>(static_cast<U>(value)) & mask;
 
-        data &= ~(mask << bitPosition);
-        data |= bits << bitPosition;
+        data &= ~(mask << bitCursor);
+        data |= bits << bitCursor;
 
-        bitPosition += bitCount;
+        bitCursor += bitCount;
+        if (bitCursor > bitSize) bitSize = bitCursor;
 
         return true;
     }
 
     template<typename T>
-    bool Read(T& outValue)
+    bool ReadNext(T& outValue, const uint8_t bitCount = static_cast<uint8_t>(sizeof(T) * 8))
     {
         static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool>);
 
-        const uint8_t bitCount = sizeof(T) * 8;
+        if (!isReading)
+        {
+            isReading = true;
+            ResetCursor();
+        }
 
-        if (bitPosition > 64 - bitCount)
-            return false;
+        if (bitCount == 0) return true;
+        if (bitCount > bitSize || bitCursor > bitSize - bitCount) return false;
 
-        uint64_t mask = bitCount == 64 ? UINT64_MAX : (uint64_t{1} << bitCount) - 1;
-        uint64_t bits = (data >> bitPosition) & mask;
+        const TBufferData mask = MakeMask(bitCount);
+        const TBufferData bits = (data >> bitCursor) & mask;
 
         outValue = static_cast<T>(bits);
-        bitPosition += bitCount;
+        bitCursor += bitCount;
 
         return true;
     }
 };
+
+using FixedBitBuffer16 = FixedBitBuffer<uint16_t>;
+using FixedBitBuffer32 = FixedBitBuffer<uint32_t>;
+using FixedBitBuffer64 = FixedBitBuffer<uint64_t>;
