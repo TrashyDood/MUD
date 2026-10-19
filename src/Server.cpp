@@ -3,60 +3,63 @@
 #include <cstring>
 #include <string>
 
-void Server::StartThread(const Clock::duration &tickRate, ServerTask& outTask)
-{
-    WRITE_LINE("Running server thread...");
+Server::Server() = default;
 
-    outTask = StaticThreadPool().SubmitTask([tickRate, this]()
+void Server::StartTickThread(const TickLoopDuration &tickStep, ThreadTask<int> &outTask)
+{
+    WRITE_LINE("Starting server tick thread...");
+
+    outTask = StaticThreadPool().SubmitTask([tickStep, this]()
     {
         TickLoop tickLoop;
-        Clock::duration deltaTime;
-        tickLoop.Reset(tickRate);
+        TickLoopDuration deltaTime, duration;
+        int result = 0;
 
-        while (tickLoop.TickWait(deltaTime))
+        while (tickLoop.WaitForTick(deltaTime, duration, tickStep))
         {
-            if (!isRunning)
-            {
-                tickLoop.Stop();
-                break;
-            }
-
-            clientSocket = accept(listenSocket, nullptr, nullptr);
-            if (clientSocket == INVALID_SOCKET)
-            {
-                WRITE_ERROR("accept() failed: " << WSAGetLastError());
-                return WSAGetLastError();
-            }
-
-            char buffer[1024]{};
-            const int bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-            if (bytesReceived > 0)
-                WRITE_LINE("Received request:\n" << buffer);
-
-            const std::string response =
-                "HTTP/1.1 200 OK\r\n"
-                "Content-Type: text/plain\r\n"
-                "Content-Length: 18\r\n"
-                "Connection: close\r\n\r\n"
-                "Hello from MUD!\n";
-
-            send(clientSocket, response.c_str(), static_cast<int>(response.size()), 0);
-            closesocket(clientSocket);
-            clientSocket = INVALID_SOCKET;
+            if ((result = OnTick()) != 0 || !IsRunning())
+            tickLoop.Stop();
         }
 
-        return 0;
+        return result;
     });
 }
 
-Server::Server() = default;
-
-int Server::Run(Port port, Clock::duration tickRate, bool shouldWait)
+int Server::OnTick()
 {
-    if (isRunning)
+    static const std::string response =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/plain\r\n"
+        "Content-Length: 18\r\n"
+        "Connection: close\r\n\r\n"
+        "Hello from MUD!\n";
+
+    clientSocket = accept(listenSocket, nullptr, nullptr);
+    if (clientSocket == INVALID_SOCKET)
+    {
+        WRITE_ERROR("accept() failed: " << WSAGetLastError());
+        return WSAGetLastError();
+    }
+
+    char buffer[1024]{};
+    const int bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+    if (bytesReceived > 0)
+        WRITE_LINE("Received request:\n"
+                   << buffer);
+
+    send(clientSocket, response.c_str(), static_cast<int>(response.size()), 0);
+    closesocket(clientSocket);
+    clientSocket = INVALID_SOCKET;
+
+    return 0;
+}
+
+int Server::Run(Port port, TickLoopDuration tickStep, bool shouldWait)
+{
+    if (IsRunning())
         return -1;
 
-    isRunning = true;
+    isRunningAtomic.store(true);
     Server::port = port;
     WSADATA wsaData{};
 
@@ -96,21 +99,25 @@ int Server::Run(Port port, Clock::duration tickRate, bool shouldWait)
 
     WRITE_LINE("Server listening on port " << port << "...");
 
-    StartThread(tickRate, runningTask);
+    StartTickThread(tickStep, runningTask);
 
     return (shouldWait) ? Wait() : 0;
 }
 
-bool Server::Terminate()
+int Server::Terminate()
 {
-    if (!isRunning)
-        return false;
+    if (!IsRunning())
+        return -1;
 
-    isRunning = false;
-    runningTask.get();
+    WRITE_LINE("Terminating server...");
+
+    int result = 0;
+
+    isRunningAtomic.store(false);
+    result = runningTask.get();
 
     closesocket(listenSocket);
     WSACleanup();
 
-    return true;
+    return result;
 }

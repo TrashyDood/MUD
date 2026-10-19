@@ -4,6 +4,8 @@
 #include <string>
 #include <chrono> 
 #include <thread>
+#include <atomic>
+#include <vector>
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -15,26 +17,28 @@
 #endif
 
 static constexpr Port DefaultPort = 8080;
-using ServerTask = ThreadTask<int>;
+static constexpr unsigned char MaxClientCount = 8;
+static constexpr TickLoopDuration ServerDefaultTickStep = 50ms;
 
 class Server
 {
-    bool isRunning;
+    std::atomic<bool> isRunningAtomic;
     Port port = DefaultPort;
     SOCKET listenSocket = INVALID_SOCKET;
     SOCKET clientSocket = INVALID_SOCKET;
-    ServerTask runningTask;
+    ThreadTask<int> runningTask;
+    std::vector<SOCKET> clientSockets;
 
-    void StartThread(const Clock::duration& tickRate, ServerTask& outTask);
+    void StartTickThread(const TickLoopDuration& tickStep, ThreadTask<int>& outTask);
+    int OnTick();
 
 public:
-    const ServerTask& RunningTask() const { return runningTask; }
-    bool IsRunning() const { return isRunning; }
-    Port CurrentPort() const { return port; }
+    const ThreadTask<int>& RunningTask() const { return runningTask; }
+    bool IsRunning() const { return isRunningAtomic.load(); }
     int Wait() { return runningTask.get(); }
     
     Server();
 
-    int Run(Port port = DefaultPort, Clock::duration tickRate = 20ms, bool shouldWait = false);
-    bool Terminate();
+    int Run(Port port = DefaultPort, TickLoopDuration tickStep = ServerDefaultTickStep, bool shouldWait = false);
+    int Terminate();
 };
