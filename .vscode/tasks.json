@@ -19,7 +19,10 @@
                 "-lws2_32"
             ],
             "options": {
-                "cwd": "${workspaceFolder}"
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "PATH": "D:\\PRODUCTIVITY\\msys2\\ucrt64\\bin;${env:PATH}"
+                }
             },
             "problemMatcher": [
                 "$gcc"

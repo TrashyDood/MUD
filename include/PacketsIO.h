@@ -81,9 +81,15 @@ public:
     TBufferData GetData() const { return data; }
 
     void ResetCursor() { bitCursor = 0; }
+<<<<<<< HEAD
     void ClearData(TBufferData overwriteWith = 0)
     {
         data = overwriteWith;
+=======
+    void ClearData()
+    {
+        data = 0;
+>>>>>>> 71fa31e (created a fully fledged fixed bit buffer for light data transfer over the network)
         bitSize = 0;
         bitCursor = 0;
         isReading = false;
@@ -112,7 +118,11 @@ public:
         }
 
         if (bitCount == 0) return true;
+<<<<<<< HEAD
         if (bitCursor > capacity - bitCount) return false;
+=======
+        if (bitCursor > static_cast<size_t>(BitCapacity()) - bitCount) return false;
+>>>>>>> 71fa31e (created a fully fledged fixed bit buffer for light data transfer over the network)
 
         using U = std::make_unsigned_t<T>;
 
