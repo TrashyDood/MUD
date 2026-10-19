@@ -9,6 +9,9 @@
 #include <future>
 #include <atomic>
 
+template<typename T>
+using ThreadTask = std::future<T>;
+
 template<unsigned char ThreadCount>
 class ThreadPool
 {
@@ -40,19 +43,19 @@ public:
 	}
 
 	template<typename F, typename... Args>
-	auto Submit(F&& f, Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>
+	auto SubmitTask(F&& f, Args&&... args) -> ThreadTask<typename std::result_of<F(Args...)>::type>
 	{
 		using ReturnType = typename std::result_of<F(Args...)>::type;
 
 		auto task = std::make_shared<std::packaged_task<ReturnType()>>(
 			std::bind(std::forward<F>(f), std::forward<Args>(args)...));
 
-		std::future<ReturnType> result = task->get_future();
+		ThreadTask<ReturnType> result = task->get_future();
 
 		{
 			std::lock_guard<std::mutex> lock(queueMutex);
 			if (stopping)
-				throw std::runtime_error("Submit called on stopped ThreadPool");
+				throw std::runtime_error("SubmitTask called on stopped ThreadPool");
 			tasks.emplace([task]() { (*task)(); });
 		}
 
@@ -64,7 +67,7 @@ public:
 	void For_Parallel(size_t count, Func&& func)
 	{
 		size_t chunkSize = (count + ParallelForThreadCount - 1) / ParallelForThreadCount;
-		std::future<void> threadResults[ParallelForThreadCount];
+		ThreadTask<void> threadResults[ParallelForThreadCount];
 		uint16_t usedThreads = 0;
 
 		for (uint16_t thread = 0; thread < ParallelForThreadCount; thread++)
@@ -75,7 +78,7 @@ public:
 
 			uint32_t chunkEnd = std::min(chunkStart + chunkSize, count);
 
-			threadResults[thread] = Submit(
+			threadResults[thread] = SubmitTask(
 				[chunkStart, chunkEnd, thread, &func]()
 				{
 					for (size_t index = chunkStart; index < chunkEnd; index++)
