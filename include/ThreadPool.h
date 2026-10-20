@@ -12,7 +12,7 @@
 template<typename T>
 using ThreadTask = std::future<T>;
 
-template<unsigned char ThreadCount>
+template<unsigned char TThreadCount>
 class ThreadPool
 {
 	std::vector<std::thread> workers;
@@ -23,11 +23,11 @@ class ThreadPool
 	bool stopping = false;
 
 public:
-	static constexpr unsigned char threadCount = ThreadCount;
+	static constexpr unsigned char ThreadCount = TThreadCount;
 
 	explicit ThreadPool()
 	{
-		for (size_t i = 0; i < ThreadCount; i++)
+		for (size_t i = 0; i < TThreadCount; i++)
 			workers.emplace_back([this]() { WorkerLoop(); });
 	}
 
@@ -42,13 +42,13 @@ public:
 			worker.join();
 	}
 
-	template<typename F, typename... Args>
-	auto SubmitTask(F&& f, Args&&... args) -> ThreadTask<typename std::result_of<F(Args...)>::type>
+	template<typename TFunc, typename... Args>
+	auto SubmitTask(TFunc&& f, Args&&... args) -> ThreadTask<typename std::result_of<TFunc(Args...)>::type>
 	{
-		using ReturnType = typename std::result_of<F(Args...)>::type;
+		using ReturnType = typename std::result_of<TFunc(Args...)>::type;
 
 		auto task = std::make_shared<std::packaged_task<ReturnType()>>(
-			std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+			std::bind(std::forward<TFunc>(f), std::forward<Args>(args)...));
 
 		ThreadTask<ReturnType> result = task->get_future();
 
@@ -63,14 +63,14 @@ public:
 		return result;
 	}
 	
-	template<int ParallelForThreadCount, typename Func>
-	void For_Parallel(size_t count, Func&& func)
+	template<int TParallelForThreadCount, typename TFunc>
+	void For_Parallel(size_t count, TFunc&& func)
 	{
-		size_t chunkSize = (count + ParallelForThreadCount - 1) / ParallelForThreadCount;
-		ThreadTask<void> threadResults[ParallelForThreadCount];
+		size_t chunkSize = (count + TParallelForThreadCount - 1) / TParallelForThreadCount;
+		ThreadTask<void> threadResults[TParallelForThreadCount];
 		uint16_t usedThreads = 0;
 
-		for (uint16_t thread = 0; thread < ParallelForThreadCount; thread++)
+		for (uint16_t thread = 0; thread < TParallelForThreadCount; thread++)
 		{
 			uint32_t chunkStart = thread * chunkSize;
 			if (chunkStart >= count)
@@ -78,12 +78,11 @@ public:
 
 			uint32_t chunkEnd = std::min(chunkStart + chunkSize, count);
 
-			threadResults[thread] = SubmitTask(
-				[chunkStart, chunkEnd, thread, &func]()
-				{
-					for (size_t index = chunkStart; index < chunkEnd; index++)
-						func(thread, chunkStart, index);
-				});
+			threadResults[thread] = SubmitTask([chunkStart, chunkEnd, thread, &func]()
+			{
+				for (size_t index = chunkStart; index < chunkEnd; index++)
+					func(thread, chunkStart, index);
+			});
 
 			usedThreads++;
 		}
@@ -114,4 +113,4 @@ private:
 	}
 };
 
-inline ThreadPool<64>& StaticThreadPool() { static ThreadPool<64> threadPoolInstance; return threadPoolInstance; }
+inline ThreadPool<32>& StaticThreadPool() { static ThreadPool<32> instance; return instance; }

@@ -3,19 +3,16 @@
 #include <cstring>
 #include <string>
 
-Server::Server() = default;
-
-void Server::StartTickThread(const TickLoopDuration &tickStep, ThreadTask<int> &outTask)
+void Server::StartTickThread(const TickLoop::Duration &tickStep, ThreadTask<int> &outTask)
 {
     WRITE_LINE("Starting server tick thread...");
 
     outTask = StaticThreadPool().SubmitTask([tickStep, this]()
     {
         TickLoop tickLoop;
-        TickLoopDuration deltaTime, duration;
         int result = 0;
 
-        while (tickLoop.WaitForTick(deltaTime, duration, tickStep))
+        while (tickLoop.WaitForTick(tickStep))
         {
             if ((result = OnTick()) != 0 || !IsRunning())
             tickLoop.Stop();
@@ -54,12 +51,12 @@ int Server::OnTick()
     return 0;
 }
 
-int Server::Run(Port port, TickLoopDuration tickStep, bool shouldWait)
+int Server::Run(Port port, TickLoop::Duration tickStep, bool shouldWait)
 {
     if (IsRunning())
         return -1;
 
-    isRunningAtomic.store(true);
+    isRunning_Atomic.store(true);
     Server::port = port;
     WSADATA wsaData{};
 
@@ -113,7 +110,7 @@ int Server::Terminate()
 
     int result = 0;
 
-    isRunningAtomic.store(false);
+    isRunning_Atomic.store(false);
     result = runningTask.get();
 
     closesocket(listenSocket);

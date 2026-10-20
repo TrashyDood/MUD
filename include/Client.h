@@ -8,4 +8,5 @@ public:
     Client() = default;
 
     int Connect();
+    int Disconnect();
 };
