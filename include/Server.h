@@ -17,28 +17,29 @@
 #endif
 
 static constexpr Port DefaultPort = 8080;
-static constexpr unsigned char MaxClientCount = 8;
-static constexpr TickLoopDuration ServerDefaultTickStep = 50ms;
+static constexpr uint16_t MaxClientCount = 8;
+static constexpr TickLoop::Duration ServerDefaultTickStep = 33ms;
 
-class Server
+class Server : public NetReceiverSender
 {
-    std::atomic<bool> isRunningAtomic;
+    std::atomic<bool> isRunning_Atomic = false;
     Port port = DefaultPort;
     SOCKET listenSocket = INVALID_SOCKET;
     SOCKET clientSocket = INVALID_SOCKET;
     ThreadTask<int> runningTask;
-    std::vector<SOCKET> clientSockets;
 
-    void StartTickThread(const TickLoopDuration& tickStep, ThreadTask<int>& outTask);
+    void StartTickThread(const TickLoop::Duration& tickStep, ThreadTask<int>& outTask);
     int OnTick();
 
-public:
-    const ThreadTask<int>& RunningTask() const { return runningTask; }
-    bool IsRunning() const { return isRunningAtomic.load(); }
-    int Wait() { return runningTask.get(); }
-    
-    Server();
+    Server() = default;
 
-    int Run(Port port = DefaultPort, TickLoopDuration tickStep = ServerDefaultTickStep, bool shouldWait = false);
+public:
+    constexpr ThreadTask<int>& RunningTask() { return runningTask; }
+    bool IsRunning() const { return isRunning_Atomic.load(); }
+    int Wait() { return runningTask.get(); }
+
+    static Server* CreateServer();
+
+    int Run(Port port = DefaultPort, TickLoop::Duration tickStep = ServerDefaultTickStep, bool shouldWait = false);
     int Terminate();
 };

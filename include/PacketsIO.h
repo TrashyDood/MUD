@@ -98,10 +98,10 @@ private:
     }
 
 public:
-    template<typename T>
-    bool WriteNext(const T& value, const uint8_t bitCount = static_cast<uint8_t>(sizeof(T) * 8))
+    template<typename TValueType>
+    bool WriteNext(const TValueType& value, const uint8_t bitCount = static_cast<uint8_t>(sizeof(TValueType) * 8))
     {
-        static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool>);
+        static_assert(std::is_integral_v<TValueType> && !std::is_same_v<TValueType, bool>);
         
         if (bitCount > BitCapacity()) return false;
 
@@ -114,7 +114,7 @@ public:
         if (bitCount == 0) return true;
         if (bitCursor > static_cast<size_t>(BitCapacity()) - bitCount) return false;
 
-        using U = std::make_unsigned_t<T>;
+        using U = std::make_unsigned_t<TValueType>;
 
         const TBufferData mask = MakeMask(bitCount);
         const TBufferData bits = static_cast<TBufferData>(static_cast<U>(value)) & mask;
@@ -128,10 +128,10 @@ public:
         return true;
     }
 
-    template<typename T>
-    bool ReadNext(T& outValue, const uint8_t bitCount = static_cast<uint8_t>(sizeof(T) * 8))
+    template<typename TValueType>
+    bool ReadNext(TValueType& outValue, const uint8_t bitCount = static_cast<uint8_t>(sizeof(TValueType) * 8))
     {
-        static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool>);
+        static_assert(std::is_integral_v<TValueType> && !std::is_same_v<TValueType, bool>);
 
         if (!isReading)
         {
@@ -145,7 +145,7 @@ public:
         const TBufferData mask = MakeMask(bitCount);
         const TBufferData bits = (data >> bitCursor) & mask;
 
-        outValue = static_cast<T>(bits);
+        outValue = static_cast<TValueType>(bits);
         bitCursor += bitCount;
 
         return true;

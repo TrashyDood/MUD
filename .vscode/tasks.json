@@ -4,9 +4,10 @@
         {
             "label": "Build MUD",
             "type": "shell",
-            "command": "C://msys64//ucrt64//bin//g++.exe",
+            "command": "D://PRODUCTIVITY//msys2//ucrt64//bin//g++.exe",
             "args": [
                 "-std=c++17",
+                "-static",
                 "-Wall",
                 "-Wextra",
                 "-Iinclude",

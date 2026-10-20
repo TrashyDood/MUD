@@ -3,24 +3,25 @@
 #include <chrono>
 
 using namespace std::chrono_literals;
-using TickLoopClock = std::chrono::high_resolution_clock;
-using TickLoopDuration = TickLoopClock::duration;
-
-constexpr TickLoopDuration DefaultTimeStep = 20ms;
 
 class TickLoop
 {
+public:
+    using Clock = std::chrono::high_resolution_clock;
+    using Duration = Clock::duration;
+
+private:
     bool isRunning = false;
-    TickLoopClock::time_point start, previous;
-    TickLoopDuration targetTimeStep;
+    Clock::time_point start, previous;
+    Duration targetTimeStep, timeStep;
 
 public:
-    TickLoopDuration CurrentDuration() const { return TickLoopClock::now() - start; }
-    TickLoopDuration CurrentDelta() const { return TickLoopClock::now() - previous; }
     bool IsRunning() const { return isRunning; }
-    const TickLoopDuration &GetTargetTimeStep() const { return targetTimeStep; }
+    Duration ElapsedTime() const { return Clock::now() - start; }
+    const Duration &TimeStep() const { return timeStep; }
+    const Duration &TargetTimeStep() const { return targetTimeStep; }
 
-    bool WaitForTick(TickLoopDuration &outDelta, TickLoopDuration &outDuration, TickLoopDuration targetTimeStep = DefaultTimeStep);
-    void Start(const TickLoopDuration &targetTimeStep = DefaultTimeStep);
+    bool WaitForTick(Duration targetTimeStep = 20ms);
+    void Start(const Duration &targetTimeStep = 20ms);
     void Stop();
 };

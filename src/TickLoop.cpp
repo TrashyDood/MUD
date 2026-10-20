@@ -1,28 +1,28 @@
 #include "TickLoop.h"
 
-bool TickLoop::WaitForTick(TickLoopDuration &outDelta, TickLoopDuration &outDuration, TickLoopDuration targetTimeStep)
+bool TickLoop::WaitForTick(Duration targetTimeStep)
 {
     if (!isRunning)
         Start(targetTimeStep);
 
-    outDelta = 0s;
+    Duration accumulator = 0s;
 
-    while (outDelta < targetTimeStep)
+    while (accumulator < targetTimeStep)
     {
-        auto now = TickLoopClock::now();
-        outDelta += CurrentDelta();
+        auto now = Clock::now();
+        accumulator += now - previous;
         previous = now;
     }
 
-    outDuration = CurrentDuration();
+    timeStep = accumulator;
 
     return isRunning;
 }
 
-void TickLoop::Start(const TickLoopDuration &targetTimeStep)
+void TickLoop::Start(const Duration &targetTimeStep)
 {
     TickLoop::targetTimeStep = targetTimeStep;
-    start = TickLoopClock::now();
+    start = Clock::now();
     isRunning = true;
 }
 

@@ -3,23 +3,20 @@
 #include <cstring>
 #include <string>
 
-Server::Server() = default;
-
-void Server::StartTickThread(const TickLoopDuration &tickStep, ThreadTask<int> &outTask)
+void Server::StartTickThread(const TickLoop::Duration &tickStep, ThreadTask<int> &outTask)
 {
     WRITE_LINE("Starting server tick thread...");
 
     outTask = StaticThreadPool().SubmitTask([tickStep, this]()
     {
         TickLoop tickLoop;
-        TickLoopDuration deltaTime, duration;
         int result = 0;
 
-        while (tickLoop.WaitForTick(deltaTime, duration, tickStep))
+        do
         {
             if ((result = OnTick()) != 0 || !IsRunning())
             tickLoop.Stop();
-        }
+        } while (tickLoop.WaitForTick(tickStep));
 
         return result;
     });
@@ -54,12 +51,17 @@ int Server::OnTick()
     return 0;
 }
 
-int Server::Run(Port port, TickLoopDuration tickStep, bool shouldWait)
+Server *Server::CreateServer()
+{
+    return nullptr;
+}
+
+int Server::Run(Port port, TickLoop::Duration tickStep, bool shouldWait)
 {
     if (IsRunning())
         return -1;
 
-    isRunningAtomic.store(true);
+    isRunning_Atomic.store(true);
     Server::port = port;
     WSADATA wsaData{};
 
@@ -111,13 +113,11 @@ int Server::Terminate()
 
     WRITE_LINE("Terminating server...");
 
-    int result = 0;
-
-    isRunningAtomic.store(false);
-    result = runningTask.get();
+    isRunning_Atomic.store(false);
+    runningTask.get();
 
     closesocket(listenSocket);
     WSACleanup();
 
-    return result;
+    return WSAGetLastError();
 }
