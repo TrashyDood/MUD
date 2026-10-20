@@ -1,5 +1,10 @@
 #include "Client.h"
 
+Client *Client::CreateClient()
+{
+    return nullptr;
+}
+
 int Client::Connect()
 {
     return 0;

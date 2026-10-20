@@ -19,6 +19,26 @@ class NetRPC;
 template <typename T>
 class NetProp;
 
+class NetReceiverSender
+{
+    inline static NetReceiverSender *instance = nullptr;
+
+protected:
+    NetReceiverSender()
+    {
+        instance = this;
+    }
+
+public:
+    static NetReceiverSender *GetInstance() { return instance; }
+
+    ~NetReceiverSender()
+    {
+        if (instance == this)
+            instance = nullptr;
+    }
+};
+
 template <typename T>
 class NetRegistry
 {
@@ -50,8 +70,9 @@ public:
     constexpr bool IsRegistered() const { return netID >= 0; }
 
     NetProp(T initialValue, NetPriority priority = 0)
+        : value(initialValue)
     {
-
+        (void)priority;
     }
 
     ~NetProp()
@@ -75,4 +96,12 @@ public:
         Set(newValue);
         return *this;
     }
+};
+
+template <typename TReturnType>
+class NetRPC
+{
+public:
+    NetRPC() = default;
+    ~NetRPC() = default;
 };

@@ -14,9 +14,12 @@ void Server::StartTickThread(const TickLoop::Duration &tickStep, ThreadTask<int>
 
         while (tickLoop.WaitForTick(tickStep))
         {
-            if ((result = OnTick()) != 0 || !IsRunning())
-            tickLoop.Stop();
+            result = OnTick();
+            if (result != 0 || !IsRunning())
+                break;
         }
+
+        tickLoop.Stop();
 
         return result;
     });

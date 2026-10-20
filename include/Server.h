@@ -20,7 +20,7 @@ static constexpr Port DefaultPort = 8080;
 static constexpr uint16_t MaxClientCount = 8;
 static constexpr TickLoop::Duration ServerDefaultTickStep = 33ms;
 
-class Server
+class Server : public NetReceiverSender
 {
     std::atomic<bool> isRunning_Atomic = false;
     Port port = DefaultPort;

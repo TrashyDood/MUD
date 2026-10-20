@@ -9,8 +9,8 @@
 #include <future>
 #include <atomic>
 
-template<typename T>
-using ThreadTask = std::future<T>;
+template<typename TValueType>
+using ThreadTask = std::future<TValueType>;
 
 template<unsigned char TThreadCount>
 class ThreadPool

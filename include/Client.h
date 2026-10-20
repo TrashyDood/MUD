@@ -2,10 +2,12 @@
 
 #include "ClientServerCommon.h"
 
-class Client
+class Client : public NetReceiverSender
 {
-public:
     Client() = default;
+
+public:
+    static Client* CreateClient();
 
     int Connect();
     int Disconnect();
