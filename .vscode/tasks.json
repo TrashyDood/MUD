@@ -16,6 +16,8 @@
                 "src/Client.cpp",
                 "src/PacketsIO.cpp",
                 "src/TickLoop.cpp",
+                "src/NetRegistry.cpp",
+                "src/NetPropBase.cpp",
                 "-o",
                 "MUD.exe",
                 "-lws2_32"
