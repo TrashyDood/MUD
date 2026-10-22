@@ -1,12 +1,11 @@
 #pragma once
 
 #include <cstddef>
-#include <vector>
 #include <queue>
+#include <vector>
 
 using NetId = int;
-using NetPriority = unsigned short;
-// typedef int (*func)(int, int);
+using NetPriority = short;
 
 class NetObj;
 
@@ -17,12 +16,10 @@ class NetRegistry
     std::vector<NetObj *> netObjects;
     std::queue<NetId> vacantIds;
 
-    void Register(NetObj &netObj);
-    void Unregister(NetObj &netObj);
+    void Register(NetObj &netObject);
+    void Unregister(NetObj &netObject);
 
 public:
     NetRegistry() = default;
     NetObj *Find(NetId id) const;
 };
-
-inline NetRegistry StaticNetRegistry;

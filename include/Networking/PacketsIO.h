@@ -11,74 +11,85 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace ByteBufferIO
+using Byte = unsigned char;
+
+class IByteBuffer
 {
-    using Byte = unsigned char;
+protected:
+    virtual Byte *Data() noexcept = 0;
+    virtual const Byte *Data() const noexcept = 0;
+    virtual size_t Size() const noexcept = 0;
 
-    class IByteBuffer
-    {
-    protected:
-        virtual Byte *Data() noexcept = 0;
-        virtual const Byte *Data() const noexcept = 0;
-        virtual std::size_t Size() const noexcept = 0;
-
-    public:
-        virtual ~IByteBuffer() = default;
-
-        template <typename T>
-        T Read(size_t index = 0) const
-        {
-            static_assert(std::is_trivially_copyable_v<T>, "ByteBuffer::Read requires a trivially copyable type");
-
-            const std::size_t offset = index;
-            if (offset > Size() || sizeof(T) > Size() - offset)
-                throw std::out_of_range("ByteBuffer read exceeds buffer size");
-
-            T value;
-            std::memcpy(&value, Data() + offset, sizeof(T));
-            return value;
-        }
-
-        template <typename T>
-        void Write(const T &value, size_t &outOffset, const size_t index = 0)
-        {
-            static_assert(std::is_trivially_copyable_v<T>, "ByteBuffer::Write requires a trivially copyable type");
-
-            const std::size_t offset = index;
-            if (offset > Size() || sizeof(T) > Size() - offset)
-                throw std::out_of_range("ByteBuffer write exceeds buffer size");
-
-            std::memcpy(Data() + offset, &value, sizeof(T));
-            outOffset = index + sizeof(T);
-        }
-    };
+public:
+    virtual ~IByteBuffer() = default;
 
     template <size_t TBufferSize>
-    struct ByteBuffer : IByteBuffer
+    void SetBytes(const std::array<Byte, TBufferSize> &bytes)
     {
-        std::array<Byte, TBufferSize> bytes{};
+        if (TBufferSize != Size())
+            throw std::invalid_argument("ByteBuffer source array size must match buffer size");
 
-        const size_t byteCount = TBufferSize;
-        const size_t bitCount = TBufferSize * 8;
+        if constexpr (TBufferSize > 0)
+            std::memcpy(Data(), bytes.data(), TBufferSize);
+    }
 
-        ByteBuffer() = default;
-        explicit ByteBuffer(std::array<Byte, TBufferSize> bytes) : bytes(bytes) {}
+    template <typename T>
+    T Read(size_t index = 0) const
+    {
+        static_assert(std::is_trivially_copyable_v<T>, "ByteBuffer::Read requires a trivially copyable type");
 
-        Byte *Data() noexcept override { return bytes.data(); }
-        const Byte *Data() const noexcept override { return bytes.data(); }
-        std::size_t Size() const noexcept override { return bytes.size(); }
+        const size_t offset = index;
+        if (offset > Size() || sizeof(T) > Size() - offset)
+            throw std::out_of_range("ByteBuffer read exceeds buffer size");
 
-        Byte &operator[](size_t index) noexcept { return bytes[index]; }
-        const Byte &operator[](size_t index) const noexcept { return bytes[index]; }
-    };
+        T value;
+        std::memcpy(&value, Data() + offset, sizeof(T));
+        return value;
+    }
 
-    using ByteBuffer16 = ByteBuffer<2>;
-    using ByteBuffer24 = ByteBuffer<3>;
-    using ByteBuffer32 = ByteBuffer<4>;
-    using ByteBuffer48 = ByteBuffer<6>;
-    using ByteBuffer64 = ByteBuffer<8>;
-    using ByteBuffer128 = ByteBuffer<16>;
-}
+    template <typename T>
+    void Write(const T &value, size_t &outOffset, const size_t index = 0)
+    {
+        static_assert(std::is_trivially_copyable_v<T>, "ByteBuffer::Write requires a trivially copyable type");
+
+        const size_t offset = index;
+        if (offset > Size() || sizeof(T) > Size() - offset)
+            throw std::out_of_range("ByteBuffer write exceeds buffer size");
+
+        std::memcpy(Data() + offset, &value, sizeof(T));
+        outOffset = index + sizeof(T);
+    }
+};
+
+template <size_t TBufferSize>
+struct ByteBuffer : IByteBuffer
+{
+    std::array<Byte, TBufferSize> bytes{};
+
+    const size_t byteCount = TBufferSize;
+    const size_t bitCount = TBufferSize * 8;
+
+    ByteBuffer() = default;
+    explicit ByteBuffer(std::array<Byte, TBufferSize> bytes) : bytes(bytes) {}
+
+    Byte *Data() noexcept override { return bytes.data(); }
+    const Byte *Data() const noexcept override { return bytes.data(); }
+    size_t Size() const noexcept override { return bytes.size(); }
+
+    Byte &operator[](size_t index) noexcept { return bytes[index]; }
+    const Byte &operator[](size_t index) const noexcept { return bytes[index]; }
+};
+
+using ByteBuffer16 = ByteBuffer<2>;
+using ByteBuffer24 = ByteBuffer<3>;
+using ByteBuffer32 = ByteBuffer<4>;
+using ByteBuffer48 = ByteBuffer<6>;
+using ByteBuffer64 = ByteBuffer<8>;
+using ByteBuffer128 = ByteBuffer<16>;
+
+class ByteBufferIO
+{
+};
 
 // OBSOLETE
 namespace FixedByteBuffer

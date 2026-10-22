@@ -1,4 +1,4 @@
-#include "Client.h"
+#include "Networking/Client.h"
 
 int Client::Connect()
 {
