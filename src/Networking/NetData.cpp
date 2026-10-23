@@ -5,7 +5,7 @@
 
 using namespace Networking;
 
-void Networking::NetRegistry::Register(NetObj &netObject)
+void Networking::NetRegistry::Register(NetObjBase &netObject)
 {
     if (!vacantIds.empty())
     {
@@ -13,6 +13,8 @@ void Networking::NetRegistry::Register(NetObj &netObject)
         vacantIds.pop();
         netObjects[id] = &netObject;
         netObject.id = id;
+        ++objectCount;
+        return;
     }
 
     if (netObjects.size() > static_cast<size_t>(std::numeric_limits<NetId>::max()))
@@ -21,9 +23,10 @@ void Networking::NetRegistry::Register(NetObj &netObject)
     const NetId id = static_cast<NetId>(netObjects.size());
     netObjects.push_back(&netObject);
     netObject.id = id;
+    ++objectCount;
 }
 
-void NetRegistry::Unregister(NetObj &netObject)
+void NetRegistry::Unregister(NetObjBase &netObject)
 {
     if (netObject.id < 0)
         return;
@@ -34,10 +37,15 @@ void NetRegistry::Unregister(NetObj &netObject)
 
     netObjects[index] = nullptr;
     vacantIds.push(netObject.id);
-    netObject.id = -1;
+    --objectCount;
 }
 
-NetObj *NetRegistry::Find(NetId id) const
+Networking::NetRegistry::~NetRegistry()
+{
+    
+}
+
+NetObjBase *NetRegistry::Find(NetId id) const
 {
     if (id < 0)
         return nullptr;
@@ -46,13 +54,13 @@ NetObj *NetRegistry::Find(NetId id) const
     return index < netObjects.size() ? netObjects[index] : nullptr;
 }
 
-NetObj::NetObj(NetRegistry &registry, const NetPriority priority)
-    : registry(registry), priority(priority)
+NetObjBase::NetObjBase(NetRegistry &registry, const NetPriority priority)
+    : priority(priority), GET_NET_REGISTRY()(registry)
 {
     registry.Register(*this);
 }
 
-NetObj::~NetObj()
+NetObjBase::~NetObjBase()
 {
-    registry.Unregister(*this);
+    GET_NET_REGISTRY().Unregister(*this);
 }

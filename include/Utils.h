@@ -7,6 +7,17 @@
 #define WRITE_LINE(x) WRITE(x) << "\n"
 #define WRITE_ERROR(x) std::cerr << x << "\n"
 
+namespace Utils
+{
+    template <typename TBase, typename TDerived>
+    struct AssertInherits
+    {
+        static_assert(std::is_base_of_v<TBase, TDerived>,
+                      "Type must inherit from the required base");
+        using type = TDerived;
+    };
+}
+
 namespace BitUtils
 {
     // Read bit

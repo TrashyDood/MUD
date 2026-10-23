@@ -22,7 +22,7 @@ namespace Networking
     static constexpr uint16_t MaxClientCount = 8;
     static constexpr TickLoop::Duration ServerDefaultTickStep = 33ms;
 
-    class Server
+    class Server : public NetReceiverSender<true>
     {
         std::atomic<bool> isRunning_Atomic = false;
         Port port = DefaultPort;
@@ -36,8 +36,6 @@ namespace Networking
     public:
         constexpr ThreadTask<int> &RunningTask() { return runningTask; }
         bool IsRunning() const { return isRunning_Atomic.load(); }
-
-        Server() = default;
 
         int Wait() { return runningTask.get(); }
         int Run(Port port = DefaultPort, TickLoop::Duration tickStep = ServerDefaultTickStep, bool shouldWait = false);

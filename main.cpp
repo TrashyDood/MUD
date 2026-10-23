@@ -1,5 +1,6 @@
 #include "Networking/Client.h"
 #include "Networking/Server.h"
+#include "Game.h"
 
 #include <charconv>
 #include <cstring>
@@ -9,12 +10,7 @@
 
 int main()
 {
-    Networking::Server server;
-
+    Game_Server serverGame;
+    Game_Client clientGame;
     return 0;
 }
-
-// int main(int argc, char* argv[])
-// {
-//     return 0;
-// }

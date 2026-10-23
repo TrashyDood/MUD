@@ -4,11 +4,8 @@
 
 namespace Networking
 {
-    class Client
+    class Client : public NetReceiverSender<false>
     {
-    protected:
-        Client() = default;
-
     public:
         int Connect();
         int Disconnect();
