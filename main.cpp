@@ -9,7 +9,7 @@
 
 int main()
 {
-    Server server;
+    Networking::Server server;
 
     return 0;
 }

@@ -4,7 +4,7 @@
         {
             "label": "Build MUD",
             "type": "shell",
-            "command": "D://PRODUCTIVITY//msys2//ucrt64//bin//g++.exe",
+            "command": "C://msys64//ucrt64//bin//g++.exe",
             "args": [
                 "-std=c++17",
                 "-static",
@@ -16,8 +16,7 @@
                 "src/Networking/Client.cpp",
                 "src/Networking/PacketsIO.cpp",
                 "src/TickLoop.cpp",
-                "src/Networking/NetRegistry.cpp",
-                "src/Networking/NetObj.cpp",
+                "src/Networking/NetData.cpp",
                 "src/Game.cpp",
                 "-o",
                 "MUD.exe",

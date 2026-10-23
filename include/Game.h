@@ -1,33 +1,32 @@
 #pragma once
 
-#include "ClientServerCommon.h"
+#include "Networking/ClientServerCommon.h"
+#include "Networking/Server.h"
+#include "Networking/Client.h"
 
-extern NetRegistry ClientNetRegistry;
-extern NetRegistry ServerNetRegistry;
-
-template<NetRegistry& TNetRegistry>
-class GameBase
+template <Networking::NetRegistry &TNetRegistry, bool TIsServer>
+class GameNetData
 {
+public:
+    NET_DATA_TYPES(TNetRegistry)
+
 protected:
-    NetRegistry &registry;
-
-public:
-    template <typename T>
-    using NetProp = NetTypes::NetProp<TNetRegistry, T>;
-    template <typename TSignature>
-    using NetFunc = NetTypes::NetFunc<TNetRegistry, TSignature>;
-
-    explicit GameBase(NetRegistry &registry);
-    virtual ~GameBase();
+    NetFunc<void(int, int)> testfunc;
+    NetProp<int> test = 0;
 };
 
-class Game_Client
+extern Networking::NetRegistry ClientNetRegistry;
+class Game_Client : public Networking::Client, public GameNetData<ClientNetRegistry, false>
 {
 public:
-    Game_Client() = default;
+    Game_Client()
+    {
+        testfunc = [this](int, int) {};
+    }
 };
 
-class Game_Server
+extern Networking::NetRegistry ServerNetRegistry;
+class Game_Server : public Networking::Server, public GameNetData<ServerNetRegistry, true>
 {
 public:
     Game_Server() = default;

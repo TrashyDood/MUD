@@ -2,11 +2,15 @@
 
 #include "ClientServerCommon.h"
 
-class Client
+namespace Networking
 {
-    Client() = default;
+    class Client
+    {
+    protected:
+        Client() = default;
 
-public:
-    int Connect();
-    int Disconnect();
-};
+    public:
+        int Connect();
+        int Disconnect();
+    };
+}

@@ -8,10 +8,13 @@
 #include <stdexcept>
 #include <type_traits>
 
-#include "Networking/PacketsIO.h"
+#include "PacketsIO.h"
 #include "ThreadPool.h"
 #include "Utils.h"
 #include "TickLoop.h"
-#include "Networking/NetObj.h"
+#include "NetData.h"
 
-using Port = unsigned short;
+namespace Networking
+{
+    using Port = unsigned short;
+}

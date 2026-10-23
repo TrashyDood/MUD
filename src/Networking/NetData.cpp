@@ -1,10 +1,11 @@
-#include "Networking/NetRegistry.h"
-#include "Networking/NetObj.h"
+#include "Networking/NetData.h"
 
 #include <limits>
 #include <stdexcept>
 
-void NetRegistry::Register(NetObj &netObject)
+using namespace Networking;
+
+void Networking::NetRegistry::Register(NetObj &netObject)
 {
     if (!vacantIds.empty())
     {
@@ -43,4 +44,27 @@ NetObj *NetRegistry::Find(NetId id) const
 
     const auto index = static_cast<size_t>(id);
     return index < netObjects.size() ? netObjects[index] : nullptr;
+}
+
+NetObj::NetObj(NetRegistry &registry, const NetPriority priority)
+    : priority(priority)
+{
+    SetRegistry(&registry);
+}
+
+
+void NetObj::SetRegistry(NetRegistry *newRegistry)
+{
+    if (registry == newRegistry)
+        return;
+
+    if (registry) registry->Unregister(*this);
+    if (newRegistry) newRegistry->Register(*this);
+
+    registry = newRegistry;
+}
+
+NetObj::~NetObj()
+{
+    SetRegistry(nullptr);
 }

@@ -1,5 +1,7 @@
 #include "Networking/Client.h"
 
+using namespace Networking;
+
 int Client::Connect()
 {
     return 0;
