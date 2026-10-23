@@ -7,21 +7,12 @@
 #include <type_traits>
 #include <vector>
 
-#define CLIENT_SERVER_RESTRICTS
-
 namespace Networking
 {
     using NetId = int;
     using NetPriority = short;
 
     class NetObj;
-
-    enum class RPCAuthority : char
-    {
-        ServerAndClient = 0,
-        ClientOnly = 1,
-        ServerOnly = 2
-    };
 
     class NetRegistry
     {
@@ -43,10 +34,8 @@ namespace Networking
         friend class NetRegistry;
 
         NetId id = -1;
-        NetRegistry *registry = nullptr;
+        NetRegistry &registry;
         NetPriority priority = 0;
-
-        void SetRegistry(NetRegistry *newRegistry);
 
     public:
         NetObj(const NetObj &) = delete;
@@ -57,15 +46,13 @@ namespace Networking
         NetId GetNetID() const { return id; }
         NetPriority GetNetPriority() const { return priority; }
         bool IsRegistered() const { return id >= 0; }
-        NetRegistry *GetRegistry() const { return registry; }
+        NetRegistry &GetRegistry() const { return registry; }
 
         NetObj(NetRegistry &registry, const NetPriority priority = 0);
         virtual ~NetObj();
-
-        void RebindRegistry(NetRegistry &registry) { SetRegistry(&registry); }
     };
 
-    template <NetRegistry &TRegistry, typename T, bool TCanSend = true, bool TCanReceive = true>
+    template <NetRegistry &TRegistry, typename T, bool TIsServerSide, bool TCanSend = true, bool TCanReceive = true>
     class NetProp : public NetObj
     {
         T value, pendingValue;
@@ -95,11 +82,11 @@ namespace Networking
         }
     };
 
-    template <NetRegistry &TRegistry, typename TSignature, bool TReassignable = true, bool TCanSend = true, bool TCanReceive = true>
+    template <NetRegistry &TRegistry, typename TSignature, bool TIsServerSide, bool TCanSend = true, bool TCanReceive = true, bool TReassignable = true>
     class NetFunc;
 
-    template <NetRegistry &TRegistry, typename TReturn, typename... TArgs, bool TReassignable, bool TCanSend, bool TCanReceive>
-    class NetFunc<TRegistry, TReturn(TArgs...), TReassignable, TCanSend, TCanReceive> : public NetObj
+    template <NetRegistry &TRegistry, typename TReturn, typename... TArgs, bool TIsServerSide, bool TCanSend, bool TCanReceive, bool TReassignable>
+    class NetFunc<TRegistry, TReturn(TArgs...), TIsServerSide, TCanSend, TCanReceive, TReassignable> : public NetObj
     {
         std::function<TReturn(TArgs...)> function;
 
@@ -112,6 +99,8 @@ namespace Networking
         explicit NetFunc(std::function<TReturn(TArgs...)> function = nullptr, const NetPriority priority = 0)
             : NetObj(TRegistry, priority), function(std::move(function)) {}
 
+        TReturn operator()(TArgs... args) const { return Invoke(std::forward<TArgs>(args)...); }
+
         template <bool TEnabled = TReassignable, std::enable_if_t<!TEnabled, int> = 0>
         NetFunc &operator=(std::function<TReturn(TArgs...)>) = delete;
 
@@ -123,14 +112,56 @@ namespace Networking
 
         template <bool TEnabled = TReassignable, std::enable_if_t<TEnabled, int> = 0>
         NetFunc &operator=(std::nullptr_t) { function = nullptr; return *this; }
-
-        TReturn operator()(TArgs... args) const { return Invoke(std::forward<TArgs>(args)...); }
     };
-
-#define NET_DATA_TYPES(registry, isServer)                               \
-    template <typename T, bool TCanSend = true, bool TCanRecieve = true> \
-    using NetProp = Networking::NetProp<registry, T>;                    \
-    template <typename TSignature, bool TReassignable = true,            \
-              bool TCanSend = true, bool TCanRecieve = true>             \
-    using NetFunc = Networking::NetFunc<registry, TSignature, TReassignable>;
 }
+
+// this is fucking madness but why not
+#define NET_REGISTRY_IMPL(isServer)                                                           \
+    template <bool TRegistryIsServer>                                                         \
+    struct NetRegistryStorage { inline static Networking::NetRegistry registry; };            \
+                                                                                              \
+    inline static Networking::NetRegistry &registry = NetRegistryStorage<isServer>::registry; \
+                                                                                              \
+    enum class NetAuthority                                                                   \
+    {                                                                                         \
+        Server,                                                                               \
+        Client,                                                                               \
+        Shared,                                                                               \
+        Local                                                                                 \
+    };                                                                                        \
+                                                                                              \
+    template <typename T, NetAuthority Authority>                                             \
+    using NetProp = Networking::NetProp<                                                      \
+        NetRegistryStorage<isServer>::registry,                                               \
+        T,                                                                                    \
+        isServer,                                                                             \
+        (Authority == NetAuthority::Server && isServer) ||                                    \
+            (Authority == NetAuthority::Client && !isServer) ||                               \
+            (Authority == NetAuthority::Shared),                                              \
+        (Authority == NetAuthority::Server && !isServer) ||                                   \
+            (Authority == NetAuthority::Client && isServer) ||                                \
+            (Authority == NetAuthority::Shared)>;                                             \
+                                                                                              \
+    template <typename TSignature, NetAuthority Authority, bool TReassignable = true>         \
+    using NetFunc = Networking::NetFunc<                                                      \
+        NetRegistryStorage<isServer>::registry,                                               \
+        TSignature,                                                                           \
+        isServer,                                                                             \
+        (Authority == NetAuthority::Server && isServer) ||                                    \
+            (Authority == NetAuthority::Client && !isServer) ||                               \
+            (Authority == NetAuthority::Shared),                                              \
+        (Authority == NetAuthority::Server && !isServer) ||                                   \
+            (Authority == NetAuthority::Client && isServer) ||                                \
+            (Authority == NetAuthority::Shared),                                              \
+        TReassignable>;
+
+#define NET_REGISTRY_1(isServer) NET_REGISTRY_IMPL(isServer)
+#define NET_REGISTRY_2(isServer, scope)                                               \
+    struct scope { NET_REGISTRY_IMPL(isServer) };                                     \
+    using NetAuthority = typename scope::NetAuthority;                                \
+    template <typename T, NetAuthority Authority>                                     \
+    using NetProp = typename scope::template NetProp<T, Authority>;                   \
+    template <typename TSignature, NetAuthority Authority, bool TReassignable = true> \
+    using NetFunc = typename scope::template NetFunc<TSignature, Authority, TReassignable>;
+#define NET_REGISTRY_SELECT(_1, _2, NAME, ...) NAME
+#define NET_REGISTRY(...) NET_REGISTRY_SELECT(__VA_ARGS__, NET_REGISTRY_2, NET_REGISTRY_1)(__VA_ARGS__)

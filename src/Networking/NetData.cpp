@@ -47,24 +47,12 @@ NetObj *NetRegistry::Find(NetId id) const
 }
 
 NetObj::NetObj(NetRegistry &registry, const NetPriority priority)
-    : priority(priority)
+    : registry(registry), priority(priority)
 {
-    SetRegistry(&registry);
-}
-
-
-void NetObj::SetRegistry(NetRegistry *newRegistry)
-{
-    if (registry == newRegistry)
-        return;
-
-    if (registry) registry->Unregister(*this);
-    if (newRegistry) newRegistry->Register(*this);
-
-    registry = newRegistry;
+    registry.Register(*this);
 }
 
 NetObj::~NetObj()
 {
-    SetRegistry(nullptr);
+    registry.Unregister(*this);
 }

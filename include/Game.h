@@ -4,29 +4,24 @@
 #include "Networking/Server.h"
 #include "Networking/Client.h"
 
-template <Networking::NetRegistry &TNetRegistry, bool TIsServer>
-class GameNetData
+template <bool TIsServer>
+class GameNetState
 {
-public:
-    NET_DATA_TYPES(TNetRegistry)
+    NET_REGISTRY(TIsServer, Net)
 
 protected:
-    NetFunc<void(int, int)> testfunc;
-    NetProp<int> test = 0;
+    NetProp<int, NetAuthority::Client> testProp;
 };
 
-extern Networking::NetRegistry ClientNetRegistry;
-class Game_Client : public Networking::Client, public GameNetData<ClientNetRegistry, false>
+class Game_Client : public Networking::Client, public GameNetState<false>
 {
 public:
     Game_Client()
     {
-        testfunc = [this](int, int) {};
     }
 };
 
-extern Networking::NetRegistry ServerNetRegistry;
-class Game_Server : public Networking::Server, public GameNetData<ServerNetRegistry, true>
+class Game_Server : public Networking::Server, public GameNetState<true>
 {
 public:
     Game_Server() = default;
