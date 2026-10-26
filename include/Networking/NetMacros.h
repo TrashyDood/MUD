@@ -1,13 +1,9 @@
 #pragma once
 
-#pragma region MACROS
 #define NET_REGISTRY_NAME() _net_registry_
 #define NET_OVERRIDE_NAME(name) _net_override_##name##_
 
-#define GET_NET_REGISTRY_SELECT(first, ...) first
-#define GET_NET_REGISTRY_WITH_CONTAINER(container) (container)->NET_REGISTRY_NAME()
-#define GET_NET_REGISTRY_WITHOUT_CONTAINER() NET_REGISTRY_NAME()
-#define GET_NET_REGISTRY(...) GET_NET_REGISTRY_SELECT(__VA_OPT__(GET_NET_REGISTRY_WITH_CONTAINER,) GET_NET_REGISTRY_WITHOUT_CONTAINER)(__VA_ARGS__)
+#define GET_NET_REGISTRY(...) __VA_OPT__((__VA_ARGS__)->) NET_REGISTRY_NAME()
 
 #define NET_TYPES(isServer)                                                                                  \
     using NetRegistry = Networking::NetRegistry;                                                             \
@@ -17,8 +13,13 @@
     template <typename TSignature, NetAuthority Authority = NetAuthority::Shared, bool TReassignable = true> \
     using NetFunc = Networking::NetFunc<TSignature, TReassignable, Authority, isServer>;
 
-#define NET_OVERRIDE(target) [[maybe_unused]] decltype(target) &NET_OVERRIDE_NAME(target) = (target)
-
+#define NET_ROLE_TYPES(netRole)                                                                              \
+    using NetAuthority = Networking::NetAuthority;                                                           \
+    template <typename T, NetAuthority Authority = NetAuthority::Shared>                                     \
+    using NetProp = typename netRole::template NetProp<T, Authority>;                                        \
+    template <typename TSignature, NetAuthority Authority = NetAuthority::Shared, bool TReassignable = true> \
+    using NetFunc = typename netRole::template NetFunc<TSignature, Authority, TReassignable>;
+    
 #define NET_REGISTRY() \
     Networking::NetRegistry NET_REGISTRY_NAME()
 
@@ -31,14 +32,8 @@
 #define NET_FUNC(name, ...) \
     NetFunc<__VA_ARGS__> name = Networking::NetObjectInitializer<NetFunc<__VA_ARGS__>> { GET_NET_REGISTRY(this) }
 
-#define NET_ROLE_TYPES(netRole)                                                                              \
-    using NetAuthority = Networking::NetAuthority;                                                           \
-    template <typename T, NetAuthority Authority = NetAuthority::Shared>                                     \
-    using NetProp = typename netRole::template NetProp<T, Authority>;                                        \
-    template <typename TSignature, NetAuthority Authority = NetAuthority::Shared, bool TReassignable = true> \
-    using NetFunc = typename netRole::template NetFunc<TSignature, Authority, TReassignable>;
+#define NET_OVERRIDE(target) [[maybe_unused]] decltype(target) &NET_OVERRIDE_NAME(target) = (target)
 
 #define NET_ROLE_SHARED(isServer) std::conditional_t<isServer, Networking::Server, Networking::Client>
 #define NET_ROLE_CLIENT(netRoleShared) Utils::AssertInherits<NET_ROLE_SHARED(false), netRoleShared<false>>::type
 #define NET_ROLE_SERVER(netRoleShared) Utils::AssertInherits<NET_ROLE_SHARED(true), netRoleShared<true>>::type
-#pragma endregion
