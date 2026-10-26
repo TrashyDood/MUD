@@ -46,7 +46,9 @@ namespace Networking
 
         NetId id = -1;
         NetPriority priority = 0;
-        NET_REGISTRY_REF();
+
+    protected:
+        NET_REGISTRY_REF;
 
     public:
         NetObjBase(const NetObjBase &) = delete;

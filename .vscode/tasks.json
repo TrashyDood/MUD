@@ -4,7 +4,7 @@
         {
             "label": "Build MUD",
             "type": "shell",
-            "command": "D://PRODUCTIVITY//msys2//ucrt64//bin//g++.exe",
+            "command": "g++",
             "args": [
                 "-std=c++17",
                 "-static",
@@ -25,7 +25,7 @@
             "options": {
                 "cwd": "${workspaceFolder}",
                 "env": {
-                    "PATH": "D:\\PRODUCTIVITY\\msys2\\ucrt64\\bin;${env:PATH}"
+                    "PATH": "C:\\msys64\\ucrt64\\bin;${env:PATH}"
                 }
             },
             "problemMatcher": [
