@@ -29,4 +29,4 @@ namespace Networking
         int Connect(const std::string &host = "127.0.0.1", Port port = DefaultPort);
         int Disconnect();
     };
-}
+} 

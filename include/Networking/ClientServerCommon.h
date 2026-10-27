@@ -39,7 +39,6 @@ namespace Networking
 
     class NetReceiverSenderBase
     {
-        NET_REGISTRY_REF;
         const bool isServer;
 
     public:
@@ -47,21 +46,20 @@ namespace Networking
         NetReceiverSenderBase &operator=(const NetReceiverSenderBase &) = delete;
         virtual ~NetReceiverSenderBase() = default;
 
-        explicit NetReceiverSenderBase(NetRegistry &registry, bool isServer)
-            : GET_NET_REGISTRY(registry), isServer(isServer) {}
+        explicit NetReceiverSenderBase(bool isServer)
+            : isServer(isServer) {}
     };
 
-    template <bool TIsServer>
+    NET_ROLE_ARGS
     class NetReceiverSender : public NetReceiverSenderBase
     {
-        NET_TYPES(TIsServer);
+        NET_TYPES
 
     protected:
-        NET_REGISTRY();
-
-        NET_FUNC(testFunc, void(NetId), NetAuthority::Shared) = [this](NetId callerId)
+        NET_PROP(testProp, int, NetAuthority::Shared) = 0;
+        NET_FUNC(testFunc, void(int), NetAuthority::Shared) = [this](int value)
         {
-            std::cout << "testFunc called! " << callerId << std::endl;
+            WRITE_LINE("testFunc called! " << value);
         };
 
     public:
@@ -71,7 +69,9 @@ namespace Networking
         NetReceiverSender &operator=(const NetReceiverSender &) = delete;
         virtual ~NetReceiverSender() = default;
 
-        explicit NetReceiverSender()
-            : NetReceiverSenderBase(GET_NET_REGISTRY, TIsServer) {}
+        explicit NetReceiverSender() : NetReceiverSenderBase(TIsServer)
+        {
+            testFunc(42);
+        }
     };
 }

@@ -2,29 +2,29 @@
 
 #include <functional>
 #include <type_traits>
+#include <tuple>
 #include <utility>
 
 #include "NetData.h"
 
-#define OBJ_TEMPLATE_ARGS NetAuthority TAuthority, bool TIsServerSide
-#define PROP_TEMPLATE_ARGS typename T, OBJ_TEMPLATE_ARGS
-#define FUNC_TEMPLATE_ARGS typename TSignature, bool TReassignable, OBJ_TEMPLATE_ARGS
 #define TEMPL_RESTRICT_ARGS(condition) bool TEnabled = true, std::enable_if_t < TEnabled && (condition), int > = 0
 
-#define ASSIGN_OP(type, templateArgs, newValue, deletedCondition, enabledCondition) \
-    template <templateArgs, TEMPL_RESTRICT_ARGS((deletedCondition))>                \
-    type &operator=(newValue) = delete;                                             \
-    template <templateArgs, TEMPL_RESTRICT_ARGS((enabledCondition))>                \
-    type &operator=(newValue)
+#define ASSIGN_OP(owner, newValue, deletedCondition, enabledCondition, ...)      \
+    template <__VA_OPT__(__VA_ARGS__, ) TEMPL_RESTRICT_ARGS((deletedCondition))> \
+    owner &operator=(newValue) = delete;                                         \
+    template <__VA_OPT__(__VA_ARGS__, ) TEMPL_RESTRICT_ARGS((enabledCondition))> \
+    owner &operator=(newValue)
 
-#define CALL_OP(returnType, templateArgs, args, deletedCondition, enabledCondition) \
-    template <templateArgs, TEMPL_RESTRICT_ARGS((deletedCondition))>                \
-    returnType operator()(args) const = delete;                                     \
-    template <templateArgs, TEMPL_RESTRICT_ARGS((enabledCondition))>                \
-    returnType operator()(args) const
+#define CALL_OP(returnType, deletedCondition, enabledCondition, ...) \
+    template <TEMPL_RESTRICT_ARGS((deletedCondition))>               \
+    returnType operator()(__VA_ARGS__) = delete;                     \
+    template <TEMPL_RESTRICT_ARGS((enabledCondition))>               \
+    returnType operator()(__VA_ARGS__)
 
 namespace Networking
 {
+    inline constexpr ReceiverId DefaultReceiverId = -1;
+
     template <NetAuthority Authority, bool TIsServerSide>
     inline constexpr bool NetCanSend =
         (Authority == NetAuthority::Server && TIsServerSide) ||
@@ -37,22 +37,51 @@ namespace Networking
         (Authority == NetAuthority::Client && TIsServerSide) ||
         (Authority == NetAuthority::Shared);
 
-    template <OBJ_TEMPLATE_ARGS>
+    template <NetAuthority Authority, bool TIsServerSide, typename... TToSend>
+    inline constexpr bool NetCanSendPayload =
+        NetCanSend<Authority, TIsServerSide> &&
+        (sizeof...(TToSend) > 0) &&
+        (!std::is_void_v<TToSend> && ...);
+
+    template <NetAuthority TAuthority, bool TIsServerSide, typename... TToSend>
     class NetObj : public NetObjBase
     {
+    public:
+        using PayloadValue = std::tuple<TToSend...>;
+
+    private:
+        PayloadValue lastPendingSend{};
+
     public:
         bool ServerSide() const override { return TIsServerSide; }
         bool CanSend() const override { return NetCanSend<TAuthority, TIsServerSide>; }
         bool CanReceive() const override { return NetCanReceive<TAuthority, TIsServerSide>; }
+        const PayloadValue &GetPendingPayloads() const { return lastPendingSend; }
 
         explicit NetObj(NetRegistry &registry, const NetPriority priority = 0)
             : NetObjBase(registry, priority) {}
+
+        bool TrySend(const TToSend &...payloads, ReceiverId receiverId = DefaultReceiverId)
+        {
+            (void)sizeof...(payloads); // Avoid unused parameter warnings.
+
+            PayloadValue payload = std::make_tuple(payloads...);
+            if (!NetObjBase::TrySend(receiverId, PendingSend::Create(GetNetID(), payload)))
+                return false;
+
+            lastPendingSend = std::move(payload);
+
+            return true;
+        }
+
+        CALL_OP(bool, (!NetCanSend<TAuthority, TIsServerSide>), (NetCanSendPayload<TAuthority, TIsServerSide, TToSend...>),
+                const TToSend &...payloads, ReceiverId receiverId = DefaultReceiverId) { return TrySend(payloads..., receiverId); }
     };
 
-    template <PROP_TEMPLATE_ARGS>
-    class NetProp : public NetObj<TAuthority, TIsServerSide>
+    template <typename T, NetAuthority TAuthority, bool TIsServerSide, typename TToSend = T>
+    class NetProp : public NetObj<TAuthority, TIsServerSide, TToSend>
     {
-        using Base = NetObj<TAuthority, TIsServerSide>;
+        using Base = NetObj<TAuthority, TIsServerSide, TToSend>;
 
         T value, pendingValue;
 
@@ -60,28 +89,36 @@ namespace Networking
         const T &GetValue() const { return value; }
         const T &GetPendingValue() const { return pendingValue; }
 
-        NetProp(NetRegistry &registry, T initialValue = T{}, const NetPriority priority = 0)
+        explicit NetProp(NetRegistry &registry, T initialValue = T{}, const NetPriority priority = 0)
             : Base(registry, priority), value(initialValue), pendingValue(std::move(initialValue)) {}
+
+        void SetValue(const T &newValue)
+        {
+            if (newValue != value)
+            {
+                Base::TrySend(newValue);
+                pendingValue = newValue;
+            }
+        }
 
         operator const T &() const { return GetPendingValue(); }
 
-        ASSIGN_OP(NetProp, typename TUnused = void, const T &newValue, (!NetCanSend<TAuthority, TIsServerSide>), (NetCanSend<TAuthority, TIsServerSide>))
+        ASSIGN_OP(NetProp, const T &newValue,
+                  (!NetCanSend<TAuthority, TIsServerSide>), (NetCanSend<TAuthority, TIsServerSide>))
         {
-            if (newValue != pendingValue)
-            {
-                this->MarkPending();
-                pendingValue = newValue;
-            }
+            SetValue(newValue);
             return *this;
         }
     };
 
-    template <FUNC_TEMPLATE_ARGS>
-    class NetFunc : public NetObj<TAuthority, TIsServerSide>
+    template <typename TSignature, bool TReassignable, NetAuthority TAuthority, bool TIsServerSide>
+    class NetFunc;
+
+    template <typename TReturnType, typename... TArgs, bool TReassignable, NetAuthority TAuthority, bool TIsServerSide>
+    class NetFunc<TReturnType(TArgs...), TReassignable, TAuthority, TIsServerSide> : public NetObj<TAuthority, TIsServerSide, TArgs...>
     {
-        using ReturnType = typename std::function<TSignature>::result_type;
-        using Base = NetObj<TAuthority, TIsServerSide>;
-        using Func = std::function<TSignature>;
+        using Base = NetObj<TAuthority, TIsServerSide, TArgs...>;
+        using Func = std::function<TReturnType(TArgs...)>;
 
         Func function;
 
@@ -90,43 +127,50 @@ namespace Networking
 
         template <typename TFunction>
         static constexpr bool IsCallableFunction =
-            std::is_invocable_r_v<ReturnType, TFunction &> &&
+            std::is_invocable_r_v<TReturnType, TFunction &, TArgs...> &&
             !std::is_same_v<std::decay_t<TFunction>, Func>;
 
         template <typename TFunction>
-        static constexpr bool CanAssignFunction = IsReassignable && IsCallableFunction<TFunction>;
+        static constexpr bool IsAssignableFunction =
+            IsReassignable &&
+            IsCallableFunction<TFunction>;
 
         NetFunc(NetRegistry &registry, Func initialFunction = nullptr, const NetPriority priority = 0)
             : Base(registry, priority), function(std::move(initialFunction)) {}
 
-        template <typename TFunction, TEMPL_RESTRICT_ARGS((std::is_invocable_r_v<ReturnType, TFunction &>))>
+        template <typename TFunction, TEMPL_RESTRICT_ARGS((std::is_invocable_r_v<TReturnType, TFunction &, TArgs...>))>
         NetFunc(NetRegistry &registry, TFunction &&initialFunction, const NetPriority priority = 0)
             : Base(registry, priority), function(std::forward<TFunction>(initialFunction)) {}
 
-        CALL_OP(ReturnType, typename... TArgs, TArgs &&...args, (!NetCanSend<TAuthority, TIsServerSide>), (NetCanSend<TAuthority, TIsServerSide>))
+        TReturnType Invoke(TArgs... args, ReceiverId receiverId = DefaultReceiverId)
         {
+            Base::TrySend(std::forward<TArgs>(args)..., receiverId);
+
             if (function)
-            {
-                this->MarkPending();
                 return function(std::forward<TArgs>(args)...);
-            }
-            if constexpr (!std::is_void_v<ReturnType>)
-                return ReturnType{};
+
+            if constexpr (!std::is_void_v<TReturnType>)
+                return TReturnType{};
         }
 
-        ASSIGN_OP(NetFunc, typename TUnused = void, Func newFunction, (!IsReassignable), (IsReassignable))
+        CALL_OP(TReturnType, (!NetCanSend<TAuthority, TIsServerSide>), (NetCanSendPayload<TAuthority, TIsServerSide, TArgs...>),
+                TArgs... args, ReceiverId receiverId = DefaultReceiverId) { return Invoke(std::forward<TArgs>(args)..., receiverId); }
+
+        ASSIGN_OP(NetFunc, Func newFunction, (!IsReassignable), (IsReassignable))
         {
             function = std::move(newFunction);
             return *this;
         }
 
-        ASSIGN_OP(NetFunc, typename TUnused = void, std::nullptr_t, (!IsReassignable), (IsReassignable))
+        ASSIGN_OP(NetFunc, std::nullptr_t, (!IsReassignable), (IsReassignable))
         {
             function = nullptr;
             return *this;
         }
 
-        ASSIGN_OP(NetFunc, typename TFunction, TFunction &&newFunction, (IsCallableFunction<TFunction> && !IsReassignable), (CanAssignFunction<TFunction>))
+        ASSIGN_OP(NetFunc, TFunction &&newFunction,
+                  (IsCallableFunction<TFunction> && !IsReassignable), (IsAssignableFunction<TFunction>),
+                  typename TFunction)
         {
             function = std::forward<TFunction>(newFunction);
             return *this;

@@ -10,10 +10,10 @@ void Networking::NetRegistry::Register(NetObjBase &netObject)
 {
     if (!vacantIds.empty())
     {
-        const NetId id = vacantIds.front();
+        const NetId netId = vacantIds.front();
         vacantIds.pop();
-        netObjects[id] = &netObject;
-        netObject.netId = id;
+        netObjects[netId] = &netObject;
+        netObject.netId = netId;
         ++objectCount;
         return;
     }
@@ -21,9 +21,9 @@ void Networking::NetRegistry::Register(NetObjBase &netObject)
     if (netObjects.size() > static_cast<size_t>(std::numeric_limits<NetId>::max()))
         throw std::length_error("NetProp registry is full");
 
-    const NetId id = static_cast<NetId>(netObjects.size());
+    const NetId netId = static_cast<NetId>(netObjects.size());
     netObjects.push_back(&netObject);
-    netObject.netId = id;
+    netObject.netId = netId;
     ++objectCount;
 }
 
@@ -41,56 +41,69 @@ void NetRegistry::Unregister(NetObjBase &netObject)
     --objectCount;
 }
 
-bool Networking::NetRegistry::MarkPendingSend(NetId id)
-{
-    if (id < 0 || id >= static_cast<NetId>(netObjects.size()))
-        return false;
-
-    pendingSends.push(id);
-    return true;
-}
-
 Networking::NetRegistry::~NetRegistry()
 {
     assert(objectCount == 0 && "NetRegistry destroyed with registered objects");
 }
 
-bool Networking::NetRegistry::TryFindById(NetId id, NetObjBase *&outObject) const
+bool Networking::NetRegistry::TryFindById(NetId netId, NetObjBase *&outObject) const
 {
-    if (id < 0)
-    {
-        outObject = nullptr;
+    outObject = nullptr;
+    if (netId < 0 || netId >= static_cast<NetId>(netObjects.size()))
         return false;
-    }
 
-    const auto index = static_cast<size_t>(id);
-    if (index >= netObjects.size())
-    {
-        outObject = nullptr;
-        return false;
-    }
+    const auto index = static_cast<size_t>(netId);
 
     outObject = netObjects[index];
     return outObject != nullptr;
 }
 
+bool Networking::NetRegistry::TryQueueSend(const NetId netId, const ReceiverId receiverId, const PendingSend &pendingSend)
+{
+    if (netId < 0 || netId >= static_cast<NetId>(netObjects.size()))
+        return false;
+
+    if (receiverId < 0)
+    {
+        for (auto &pendingSends : pendingSendsByReceiver)
+            pendingSends.push(pendingSend);
+        return true;
+    }
+
+    const size_t receiverIndex = static_cast<size_t>(receiverId);
+    if (receiverIndex >= pendingSendsByReceiver.size())
+        pendingSendsByReceiver.resize(receiverIndex + 1);
+
+    pendingSendsByReceiver[receiverIndex].push(pendingSend);
+    return true;
+}
+
+bool Networking::NetRegistry::TryPopPendingSend(ReceiverId receiverId, PendingSend &outSend)
+{
+    if (receiverId < 0)
+        return false;
+
+    const size_t receiverIndex = static_cast<size_t>(receiverId);
+    if (receiverIndex >= pendingSendsByReceiver.size() || pendingSendsByReceiver[receiverIndex].empty())
+        return false;
+
+    outSend = std::move(pendingSendsByReceiver[receiverIndex].front());
+    pendingSendsByReceiver[receiverIndex].pop();
+    return true;
+}
+
 NetObjBase::NetObjBase(NetRegistry &registry, const NetPriority priority)
-    : priority(priority), GET_NET_REGISTRY(registry)
+    : priority(priority), netRegistry(registry)
 {
     registry.Register(*this);
 }
 
 NetObjBase::~NetObjBase()
 {
-    GET_NET_REGISTRY.Unregister(*this);
+    netRegistry.Unregister(*this);
 }
 
-bool Networking::NetObjBase::MarkPending()
+bool Networking::NetObjBase::TrySend(ReceiverId receiverId, const PendingSend &pendingSend)
 {
-    if (isPending || !GET_NET_REGISTRY.MarkPendingSend(netId))
-        return false;
-
-    isPending = true;
-
-    return true;
+    return netRegistry.TryQueueSend(netId, receiverId, pendingSend);
 }
