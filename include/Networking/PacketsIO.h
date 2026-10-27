@@ -15,30 +15,32 @@ using Byte = unsigned char;
 
 namespace Networking
 {
-    class IByteBuffer
+    class ByteBufferBase
     {
     protected:
         virtual Byte *Data() noexcept = 0;
         virtual const Byte *Data() const noexcept = 0;
         virtual size_t Size() const noexcept = 0;
 
+        ByteBufferBase() = default;
+
     public:
-        virtual ~IByteBuffer() = default;
+        virtual ~ByteBufferBase() = default;
 
         template <size_t TBufferSize>
         void SetBytes(const std::array<Byte, TBufferSize> &bytes)
         {
             if (TBufferSize != Size())
-                throw std::invalid_argument("ByteBuffer source array size must match buffer size");
+                throw std::invalid_argument("ByteBuffer source array size must match buffer size.");
 
             if constexpr (TBufferSize > 0)
                 std::memcpy(Data(), bytes.data(), TBufferSize);
         }
 
         template <typename T>
-        T Read(size_t index = 0) const
+        T Read(const size_t index) const
         {
-            static_assert(std::is_trivially_copyable_v<T>, "ByteBuffer::Read requires a trivially copyable type");
+            static_assert(std::is_trivially_copyable_v<T>, "ByteBuffer::Read requires a trivially copyable type.");
 
             const size_t offset = index;
             if (offset > Size() || sizeof(T) > Size() - offset)
@@ -50,13 +52,13 @@ namespace Networking
         }
 
         template <typename T>
-        void Write(const T &value, size_t &outOffset, const size_t index = 0)
+        void Write(const T &value, const size_t index, size_t &outOffset)
         {
-            static_assert(std::is_trivially_copyable_v<T>, "ByteBuffer::Write requires a trivially copyable type");
+            static_assert(std::is_trivially_copyable_v<T>, "ByteBuffer::Write requires a trivially copyable type.");
 
             const size_t offset = index;
             if (offset > Size() || sizeof(T) > Size() - offset)
-                throw std::out_of_range("ByteBuffer write exceeds buffer size");
+                throw std::out_of_range("ByteBuffer write exceeds buffer size.");
 
             std::memcpy(Data() + offset, &value, sizeof(T));
             outOffset = index + sizeof(T);
@@ -64,7 +66,7 @@ namespace Networking
     };
 
     template <size_t TBufferSize>
-    struct ByteBuffer : IByteBuffer
+    struct ByteBuffer : ByteBufferBase
     {
         std::array<Byte, TBufferSize> bytes{};
 

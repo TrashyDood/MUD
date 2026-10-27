@@ -56,26 +56,22 @@ namespace Networking
 
         T value, pendingValue;
 
-        bool SetPending(const T &newValue)
-        {
-            if (newValue == pendingValue)
-                return false;
-            pendingValue = newValue;
-            return true;
-        }
-
     public:
-        const T &Get() const { return value; }
-        const T &GetPending() const { return pendingValue; }
+        const T &GetValue() const { return value; }
+        const T &GetPendingValue() const { return pendingValue; }
 
         NetProp(NetRegistry &registry, T initialValue = T{}, const NetPriority priority = 0)
             : Base(registry, priority), value(initialValue), pendingValue(std::move(initialValue)) {}
 
-        operator const T &() const { return GetPending(); }
+        operator const T &() const { return GetPendingValue(); }
 
         ASSIGN_OP(NetProp, typename TUnused = void, const T &newValue, (!NetCanSend<TAuthority, TIsServerSide>), (NetCanSend<TAuthority, TIsServerSide>))
         {
-            SetPending(newValue);
+            if (newValue != pendingValue)
+            {
+                this->MarkPending();
+                pendingValue = newValue;
+            }
             return *this;
         }
     };
@@ -110,7 +106,10 @@ namespace Networking
         CALL_OP(ReturnType, typename... TArgs, TArgs &&...args, (!NetCanSend<TAuthority, TIsServerSide>), (NetCanSend<TAuthority, TIsServerSide>))
         {
             if (function)
+            {
+                this->MarkPending();
                 return function(std::forward<TArgs>(args)...);
+            }
             if constexpr (!std::is_void_v<ReturnType>)
                 return ReturnType{};
         }

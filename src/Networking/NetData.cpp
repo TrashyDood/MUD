@@ -1,5 +1,6 @@
 #include "Networking/NetData.h"
 
+#include <cassert>
 #include <limits>
 #include <stdexcept>
 
@@ -12,7 +13,7 @@ void Networking::NetRegistry::Register(NetObjBase &netObject)
         const NetId id = vacantIds.front();
         vacantIds.pop();
         netObjects[id] = &netObject;
-        netObject.id = id;
+        netObject.netId = id;
         ++objectCount;
         return;
     }
@@ -22,45 +23,74 @@ void Networking::NetRegistry::Register(NetObjBase &netObject)
 
     const NetId id = static_cast<NetId>(netObjects.size());
     netObjects.push_back(&netObject);
-    netObject.id = id;
+    netObject.netId = id;
     ++objectCount;
 }
 
 void NetRegistry::Unregister(NetObjBase &netObject)
 {
-    if (netObject.id < 0)
+    if (netObject.netId < 0)
         return;
 
-    const size_t index = static_cast<size_t>(netObject.id);
+    const size_t index = static_cast<size_t>(netObject.netId);
     if (index >= netObjects.size() || netObjects[index] != &netObject)
         return;
 
     netObjects[index] = nullptr;
-    vacantIds.push(netObject.id);
+    vacantIds.push(netObject.netId);
     --objectCount;
+}
+
+bool Networking::NetRegistry::MarkPendingSend(NetId id)
+{
+    if (id < 0 || id >= static_cast<NetId>(netObjects.size()))
+        return false;
+
+    pendingSends.push(id);
+    return true;
 }
 
 Networking::NetRegistry::~NetRegistry()
 {
-    
+    assert(objectCount == 0 && "NetRegistry destroyed with registered objects");
 }
 
-NetObjBase *NetRegistry::Find(NetId id) const
+bool Networking::NetRegistry::TryFindById(NetId id, NetObjBase *&outObject) const
 {
     if (id < 0)
-        return nullptr;
+    {
+        outObject = nullptr;
+        return false;
+    }
 
     const auto index = static_cast<size_t>(id);
-    return index < netObjects.size() ? netObjects[index] : nullptr;
+    if (index >= netObjects.size())
+    {
+        outObject = nullptr;
+        return false;
+    }
+
+    outObject = netObjects[index];
+    return outObject != nullptr;
 }
 
 NetObjBase::NetObjBase(NetRegistry &registry, const NetPriority priority)
-    : priority(priority), GET_NET_REGISTRY()(registry)
+    : priority(priority), GET_NET_REGISTRY(registry)
 {
     registry.Register(*this);
 }
 
 NetObjBase::~NetObjBase()
 {
-    GET_NET_REGISTRY().Unregister(*this);
+    GET_NET_REGISTRY.Unregister(*this);
+}
+
+bool Networking::NetObjBase::MarkPending()
+{
+    if (isPending || !GET_NET_REGISTRY.MarkPendingSend(netId))
+        return false;
+
+    isPending = true;
+
+    return true;
 }

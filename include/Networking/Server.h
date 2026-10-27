@@ -18,12 +18,26 @@
 
 namespace Networking
 {
-    static constexpr Port DefaultPort = 8080;
-    static constexpr uint16_t MaxClientCount = 8;
-    static constexpr TickLoop::Duration ServerDefaultTickStep = 33ms;
+    class ConnectedClient
+    {
+        SOCKET socket = INVALID_SOCKET;
+
+    public:
+        ConnectedClient(const ConnectedClient &) = delete;
+        ConnectedClient &operator=(const ConnectedClient &) = delete;
+        virtual ~ConnectedClient() = default;
+
+        SOCKET GetSocket() const { return socket; }
+
+        ConnectedClient(SOCKET socket)
+            : socket(socket) {}
+    };
 
     class Server : public NetReceiverSender<true>
     {
+        static constexpr uint16_t MaxClientCount = 8;
+        static constexpr TickLoop::Duration ServerDefaultTickStep = 33ms;
+
         std::atomic<bool> isRunning_Atomic = false;
         Port port = DefaultPort;
         SOCKET listenSocket = INVALID_SOCKET;

@@ -22,6 +22,7 @@ namespace Networking
     class Server;
 
     using Port = unsigned short;
+    inline constexpr Port DefaultPort = 8080;
 
     template <typename TNetObject>
     class NetObjectInitializer
@@ -43,20 +44,21 @@ namespace Networking
 
     public:
         NetReceiverSenderBase(const NetReceiverSenderBase &) = delete;
+        NetReceiverSenderBase &operator=(const NetReceiverSenderBase &) = delete;
         virtual ~NetReceiverSenderBase() = default;
 
         explicit NetReceiverSenderBase(NetRegistry &registry, bool isServer)
-            : GET_NET_REGISTRY()(registry), isServer(isServer) {}
+            : GET_NET_REGISTRY(registry), isServer(isServer) {}
     };
 
     template <bool TIsServer>
     class NetReceiverSender : public NetReceiverSenderBase
     {
-    protected:
         NET_TYPES(TIsServer);
+
+    protected:
         NET_REGISTRY();
 
-        NET_PROP(test, int, NetAuthority::Shared);
         NET_FUNC(testFunc, void(NetId), NetAuthority::Shared) = [this](NetId callerId)
         {
             std::cout << "testFunc called! " << callerId << std::endl;
@@ -66,9 +68,10 @@ namespace Networking
         static constexpr bool IsServer = TIsServer;
 
         NetReceiverSender(const NetReceiverSender &) = delete;
+        NetReceiverSender &operator=(const NetReceiverSender &) = delete;
         virtual ~NetReceiverSender() = default;
 
         explicit NetReceiverSender()
-            : NetReceiverSenderBase(GET_NET_REGISTRY(), TIsServer) {}
+            : NetReceiverSenderBase(GET_NET_REGISTRY, TIsServer) {}
     };
 }
