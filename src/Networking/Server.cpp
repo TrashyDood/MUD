@@ -1,68 +1,107 @@
 #include "Networking/Server.h"
 
-#include <cstring>
-#include <string>
+#include <algorithm>
+#include <array>
 
 using namespace Networking;
 
-void Server::StartTickThread(const TickLoop::Duration &tickStep, ThreadTask<int> &outTask)
+ConnectedClient::~ConnectedClient()
 {
-    WRITE_LINE("Starting server tick thread...");
-
-    outTask = StaticThreadPool().SubmitTask([tickStep, this]()
-    {
-        TickLoop tickLoop;
-        int result = 0;
-
-        while (tickLoop.WaitForTick(tickStep))
-        {
-            result = OnTick();
-            if (result != 0 || !IsRunning())
-                break;
-        }
-
-        tickLoop.Stop();
-
-        return result;
-    });
+    if (socket_ != INVALID_SOCKET)
+        closesocket(socket_);
 }
 
-int Server::OnTick()
+void Server::DisconnectClient(const std::size_t clientIndex)
 {
-    static const std::string response =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/plain\r\n"
-        "Content-Length: 18\r\n"
-        "Connection: close\r\n\r\n"
-        "Hello from MUD!\n";
+    ClearSendByteQueue(static_cast<ConnectionId>(clientIndex));
+    ClearReceiveByteQueue(static_cast<ConnectionId>(clientIndex));
+    connectedClients[clientIndex].reset();
+}
 
-    clientSocket = accept(listenSocket, nullptr, nullptr);
-    if (clientSocket == INVALID_SOCKET)
+int Server::AcceptIncomingClients()
+{
+    while (true)
     {
-        WRITE_ERROR("accept() failed: " << WSAGetLastError());
-        return WSAGetLastError();
+        SOCKET clientSocket = accept(listenSocket, nullptr, nullptr);
+        if (clientSocket == INVALID_SOCKET)
+        {
+            const int error = WSAGetLastError();
+            if (error == WSAEWOULDBLOCK)
+                return 0;
+
+            WRITE_ERROR("accept() failed: " << error);
+            return error;
+        }
+
+        const auto freeClient = std::find(connectedClients.begin(), connectedClients.end(), nullptr);
+        if (freeClient == connectedClients.end())
+        {
+            closesocket(clientSocket);
+            continue;
+        }
+
+        const auto clientIndex = static_cast<std::size_t>(freeClient - connectedClients.begin());
+        u_long nonBlocking = 1;
+        if (ioctlsocket(clientSocket, FIONBIO, &nonBlocking) == SOCKET_ERROR)
+        {
+            WRITE_ERROR("ioctlsocket() failed for client: " << WSAGetLastError());
+            closesocket(clientSocket);
+            continue;
+        }
+
+        *freeClient = std::make_unique<ConnectedClient>(clientSocket);
+        WRITE_LINE("Client connected in slot " << clientIndex);
     }
-
-    char buffer[1024]{};
-    const int bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-    if (bytesReceived > 0)
-        WRITE_LINE("Received request:\n"
-                   << buffer);
-
-    send(clientSocket, response.c_str(), static_cast<int>(response.size()), 0);
-    closesocket(clientSocket);
-    clientSocket = INVALID_SOCKET;
 
     return 0;
 }
 
-int Server::Run(Port port, TickLoop::Duration tickStep, bool shouldWait)
+void Server::ReceiveClientMessages(const std::size_t clientIndex)
+{
+    bool peerClosed = false;
+    const int receiveError = ReceiveBytes(static_cast<ConnectionId>(clientIndex), peerClosed);
+
+    if (!peerClosed && receiveError == 0)
+        return;
+
+    DisconnectClient(clientIndex);
+    if (peerClosed)
+        WRITE_LINE("Client disconnected from slot " << clientIndex);
+    else
+        WRITE_ERROR("recv() failed for client in slot " << clientIndex << ": " << receiveError);
+}
+
+int Server::OnTick()
+{
+    const int acceptResult = AcceptIncomingClients();
+    if (acceptResult != 0)
+        return acceptResult;
+
+    for (std::size_t clientIndex = 0; clientIndex < connectedClients.size(); ++clientIndex)
+    {
+        if (connectedClients[clientIndex])
+        {
+            ReceiveClientMessages(clientIndex);
+            if (connectedClients[clientIndex])
+            {
+                const int sendError = FlushSendByteQueue(static_cast<ConnectionId>(clientIndex));
+                if (sendError != 0)
+                {
+                    WRITE_ERROR("send() failed for client in slot " << clientIndex << ": " << sendError);
+                    DisconnectClient(clientIndex);
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+int Server::Listen(const Port port)
 {
     if (IsRunning())
         return -1;
 
-    isRunning_Atomic.store(true);
-    Server::port = port;
     WSADATA wsaData{};
 
     const int startupResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -72,12 +111,23 @@ int Server::Run(Port port, TickLoop::Duration tickStep, bool shouldWait)
         return startupResult;
     }
 
+    const auto fail = [this](const int error)
+    {
+        if (listenSocket != INVALID_SOCKET)
+        {
+            closesocket(listenSocket);
+            listenSocket = INVALID_SOCKET;
+        }
+        WSACleanup();
+        return error;
+    };
+
     listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (listenSocket == INVALID_SOCKET)
     {
-        WRITE_ERROR("socket() failed: " << WSAGetLastError());
-        WSACleanup();
-        return WSAGetLastError();
+        const int error = WSAGetLastError();
+        WRITE_ERROR("socket() failed: " << error);
+        return fail(error);
     }
 
     sockaddr_in service{};
@@ -87,38 +137,44 @@ int Server::Run(Port port, TickLoop::Duration tickStep, bool shouldWait)
 
     if (bind(listenSocket, reinterpret_cast<SOCKADDR *>(&service), sizeof(service)) == SOCKET_ERROR)
     {
-        WRITE_ERROR("bind() failed: " << WSAGetLastError());
-        Terminate();
-        return WSAGetLastError();
+        const int error = WSAGetLastError();
+        WRITE_ERROR("bind() failed: " << error);
+        return fail(error);
     }
 
     if (listen(listenSocket, SOMAXCONN) == SOCKET_ERROR)
     {
-        WRITE_ERROR("listen() failed: " << WSAGetLastError());
-        Terminate();
-        return WSAGetLastError();
+        const int error = WSAGetLastError();
+        WRITE_ERROR("listen() failed: " << error);
+        return fail(error);
+    }
+
+    u_long nonBlocking = 1;
+    if (ioctlsocket(listenSocket, FIONBIO, &nonBlocking) == SOCKET_ERROR)
+    {
+        const int error = WSAGetLastError();
+        WRITE_ERROR("ioctlsocket() failed for listener: " << error);
+        return fail(error);
     }
 
     WRITE_LINE("Server listening on port " << port << "...");
-
-    StartTickThread(tickStep, runningTask);
-
-    return (shouldWait) ? Wait() : 0;
+    return 0;
 }
 
 int Server::Terminate()
 {
-    if (!IsRunning())
+    if (listenSocket == INVALID_SOCKET)
         return -1;
 
     WRITE_LINE("Terminating server...");
 
-    int result = 0;
+    const int result = NetReceiverSender<true>::Terminate();
 
-    isRunning_Atomic.store(false);
-    result = runningTask.get();
+    for (std::size_t i = 0; i < connectedClients.size(); ++i)
+        DisconnectClient(i);
 
     closesocket(listenSocket);
+    listenSocket = INVALID_SOCKET;
     WSACleanup();
 
     return result;

@@ -1,11 +1,10 @@
 #pragma once
 
+#include <array>
 #include <iostream>
 #include <string>
 #include <chrono>
-#include <thread>
-#include <atomic>
-#include <vector>
+#include <memory>
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -20,39 +19,38 @@ namespace Networking
 {
     class ConnectedClient
     {
-        SOCKET socket = INVALID_SOCKET;
+        SOCKET socket_ = INVALID_SOCKET;
 
     public:
         ConnectedClient(const ConnectedClient &) = delete;
         ConnectedClient &operator=(const ConnectedClient &) = delete;
-        virtual ~ConnectedClient() = default;
+        ~ConnectedClient();
 
-        SOCKET GetSocket() const { return socket; }
+        SOCKET GetSocket() const { return socket_; }
 
-        ConnectedClient(SOCKET socket)
-            : socket(socket) {}
+        explicit ConnectedClient(SOCKET socket) : socket_(socket) {}
     };
 
     class Server : public NetReceiverSender<true>
     {
-        static constexpr uint16_t MaxClientCount = 8;
-        static constexpr TickLoop::Duration ServerDefaultTickStep = 33ms;
+        static constexpr ConnectionId MaxClientCount = 8;
 
-        std::atomic<bool> isRunning_Atomic = false;
-        Port port = DefaultPort;
         SOCKET listenSocket = INVALID_SOCKET;
-        SOCKET clientSocket = INVALID_SOCKET;
-        ThreadTask<int> runningTask;
+        std::array<std::unique_ptr<ConnectedClient>, static_cast<std::size_t>(MaxClientCount)> connectedClients{};
 
-        void StartTickThread(const TickLoop::Duration &tickStep, ThreadTask<int> &outTask);
-        int OnTick();
+        int AcceptIncomingClients();
+        void ReceiveClientMessages(std::size_t clientIndex);
+        void DisconnectClient(std::size_t clientIndex);
+        SOCKET GetConnectionSocket(ConnectionId connectionId) const override
+        {
+            return connectionId < connectedClients.size() && connectedClients[connectionId]
+                ? connectedClients[connectionId]->GetSocket()
+                : INVALID_SOCKET;
+        }
+        int OnTick() override;
 
     public:
-        constexpr ThreadTask<int> &RunningTask() { return runningTask; }
-        bool IsRunning() const { return isRunning_Atomic.load(); }
-
-        int Wait() { return runningTask.get(); }
-        int Run(Port port = DefaultPort, TickLoop::Duration tickStep = ServerDefaultTickStep, bool shouldWait = false);
-        int Terminate();
+        int Listen(Port port = DefaultPort);
+        int Terminate() override;
     };
 }

@@ -2,7 +2,6 @@
 
 #include <functional>
 #include <type_traits>
-#include <tuple>
 #include <utility>
 
 #include "NetData.h"
@@ -23,8 +22,6 @@
 
 namespace Networking
 {
-    inline constexpr ReceiverId DefaultReceiverId = -1;
-
     template <NetAuthority Authority, bool TIsServerSide>
     inline constexpr bool NetCanSend =
         (Authority == NetAuthority::Server && TIsServerSide) ||
@@ -47,35 +44,24 @@ namespace Networking
     class NetObj : public NetObjBase
     {
     public:
-        using PayloadValue = std::tuple<TToSend...>;
+        static constexpr bool IsServerSide = TIsServerSide;
+        static constexpr bool CanSend = NetCanSend<TAuthority, TIsServerSide>;
+        static constexpr bool CanReceive = NetCanReceive<TAuthority, TIsServerSide>;
+        static constexpr bool ToSendByteSize = (sizeof...(TToSend) > 0) && (!std::is_void_v<TToSend> && ...);
 
-    private:
-        PayloadValue lastPendingSend{};
-
-    public:
-        bool ServerSide() const override { return TIsServerSide; }
-        bool CanSend() const override { return NetCanSend<TAuthority, TIsServerSide>; }
-        bool CanReceive() const override { return NetCanReceive<TAuthority, TIsServerSide>; }
-        const PayloadValue &GetPendingPayloads() const { return lastPendingSend; }
+        bool GetIsServerSide() const override { return IsServerSide; }
+        bool GetCanSend() const override { return CanSend; }
+        bool GetCanReceive() const override { return CanReceive; }
+        bool GetToSendByteSize() const override { return ToSendByteSize; }
 
         explicit NetObj(NetRegistry &registry, const NetPriority priority = 0)
             : NetObjBase(registry, priority) {}
 
-        bool TrySend(const TToSend &...payloads, ReceiverId receiverId = DefaultReceiverId)
-        {
-            (void)sizeof...(payloads); // Avoid unused parameter warnings.
-
-            PayloadValue payload = std::make_tuple(payloads...);
-            if (!NetObjBase::TrySend(receiverId, PendingSend::Create(GetNetID(), payload)))
-                return false;
-
-            lastPendingSend = std::move(payload);
-
-            return true;
-        }
-
         CALL_OP(bool, (!NetCanSend<TAuthority, TIsServerSide>), (NetCanSendPayload<TAuthority, TIsServerSide, TToSend...>),
-                const TToSend &...payloads, ReceiverId receiverId = DefaultReceiverId) { return TrySend(payloads..., receiverId); }
+                const TToSend &...toSend, MessageType messageType = 0, ReceiverId receiverId = DefaultReceiverId)
+        {
+            return NetObjBase::TrySendData(receiverId, messageType, toSend...);
+        }
     };
 
     template <typename T, NetAuthority TAuthority, bool TIsServerSide, typename TToSend = T>
@@ -83,30 +69,21 @@ namespace Networking
     {
         using Base = NetObj<TAuthority, TIsServerSide, TToSend>;
 
-        T value, pendingValue;
+        T value;
 
     public:
         const T &GetValue() const { return value; }
-        const T &GetPendingValue() const { return pendingValue; }
 
         explicit NetProp(NetRegistry &registry, T initialValue = T{}, const NetPriority priority = 0)
-            : Base(registry, priority), value(initialValue), pendingValue(std::move(initialValue)) {}
+            : Base(registry, priority), value(initialValue) {}
 
-        void SetValue(const T &newValue)
+        ASSIGN_OP(NetProp, const T &newValue, (!NetCanSend<TAuthority, TIsServerSide>), (NetCanSend<TAuthority, TIsServerSide>))
         {
             if (newValue != value)
             {
-                Base::TrySend(newValue);
-                pendingValue = newValue;
+                Base::operator()(newValue);
+                value = newValue;
             }
-        }
-
-        operator const T &() const { return GetPendingValue(); }
-
-        ASSIGN_OP(NetProp, const T &newValue,
-                  (!NetCanSend<TAuthority, TIsServerSide>), (NetCanSend<TAuthority, TIsServerSide>))
-        {
-            SetValue(newValue);
             return *this;
         }
     };
@@ -142,9 +119,10 @@ namespace Networking
         NetFunc(NetRegistry &registry, TFunction &&initialFunction, const NetPriority priority = 0)
             : Base(registry, priority), function(std::forward<TFunction>(initialFunction)) {}
 
-        TReturnType Invoke(TArgs... args, ReceiverId receiverId = DefaultReceiverId)
+        CALL_OP(TReturnType, (!NetCanSend<TAuthority, TIsServerSide>), (NetCanSendPayload<TAuthority, TIsServerSide, TArgs...>),
+                TArgs... args, MessageType messageType = 0, ReceiverId receiverId = DefaultReceiverId)
         {
-            Base::TrySend(std::forward<TArgs>(args)..., receiverId);
+            Base::operator()(std::forward<TArgs>(args)..., messageType, receiverId);
 
             if (function)
                 return function(std::forward<TArgs>(args)...);
@@ -152,9 +130,6 @@ namespace Networking
             if constexpr (!std::is_void_v<TReturnType>)
                 return TReturnType{};
         }
-
-        CALL_OP(TReturnType, (!NetCanSend<TAuthority, TIsServerSide>), (NetCanSendPayload<TAuthority, TIsServerSide, TArgs...>),
-                TArgs... args, ReceiverId receiverId = DefaultReceiverId) { return Invoke(std::forward<TArgs>(args)..., receiverId); }
 
         ASSIGN_OP(NetFunc, Func newFunction, (!IsReassignable), (IsReassignable))
         {

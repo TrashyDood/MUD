@@ -25,16 +25,16 @@
 
 // Declare a local net property for a class.
 #define NET_PROP(name, ...) \
-    NetProp<__VA_ARGS__> name = Networking::NetObjectInitializer<NetProp<__VA_ARGS__>> { GET_NET_REGISTRY_STAT }
+    NetProp<__VA_ARGS__> name = Networking::NetObjectInitializer<NetProp<__VA_ARGS__>> { *this }
 
 // Declare a scope.local net class.
 #define NET_FUNC(name, ...) \
-    NetFunc<__VA_ARGS__> name = Networking::NetObjectInitializer<NetFunc<__VA_ARGS__>> { GET_NET_REGISTRY_STAT }
+    NetFunc<__VA_ARGS__> name = Networking::NetObjectInitializer<NetFunc<__VA_ARGS__>> { *this }
 
 // Override the value of a net property or function.
 #define NET_OVERRIDE(target) [[maybe_unused]] decltype(target) &_net_override_##target##_ = (target)
 
 #define NET_ROLE_ARGS template <bool TIsServer>
 #define NET_ROLE_SHARED std::conditional_t<TIsServer, Networking::Server, Networking::Client>
-#define NET_ROLE_CLIENT(netRoleShared) Utils::AssertInherits<Networking::Client, netRoleShared<false>>::type
-#define NET_ROLE_SERVER(netRoleShared) Utils::AssertInherits<Networking::Server, netRoleShared<true>>::type
+#define NET_ROLE_CLIENT(netRoleShared) Networking::AssertInherits<Networking::Client, netRoleShared<false>>::type
+#define NET_ROLE_SERVER(netRoleShared) Networking::AssertInherits<Networking::Server, netRoleShared<true>>::type

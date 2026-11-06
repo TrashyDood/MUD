@@ -14,7 +14,7 @@
                 "main.cpp",
                 "src/Networking/Server.cpp",
                 "src/Networking/Client.cpp",
-                "src/Networking/PacketsIO.cpp",
+                "src/Networking/ClientServerCommon.cpp",
                 "src/TickLoop.cpp",
                 "src/Networking/NetData.cpp",
                 "src/Game.cpp",
